@@ -11,7 +11,7 @@ import {
   ComponentType,
   MessageFlags,
 } from "discord.js";
-import { createCanvas, loadImage } from "canvas";
+import { createCanvas, loadImage, Image } from "@napi-rs/canvas";
 import path from "path";
 import { RussianStatsManager } from "../utils/russianStatsManager.js";
 import { LockManager } from "../utils/lockManager.js";
@@ -143,7 +143,7 @@ async function createRussianImage(
     path.join(process.cwd(), "altershaper-bot", "dist", "russian.png"),
   ];
 
-  let background: import("canvas").Image | null = null;
+  let background: Image | null = null;
 
   for (const imagePath of possiblePaths) {
     try {
@@ -234,7 +234,7 @@ async function createRussianImage(
     console.error("Error drawing avatar:", error);
   }
 
-  return canvas.toBuffer();
+  return canvas.encode("png");
 }
 
 export async function execute(
@@ -406,7 +406,8 @@ export async function execute(
     imageTarget?: User,
   ) => {
     const target = imageTarget || opponentUser;
-    const targetImageMember = target.id === inviterUser.id ? inviterMember : targetMember;
+    const targetImageMember =
+      target.id === inviterUser.id ? inviterMember : targetMember;
     const currentTurnImageMember =
       currentTurnUser.id === inviterUser.id ? inviterMember : targetMember;
     const imageBuffer = await createRussianImage(

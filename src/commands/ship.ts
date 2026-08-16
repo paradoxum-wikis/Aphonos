@@ -7,7 +7,7 @@ import {
   User,
   MessageFlags,
 } from "discord.js";
-import { createCanvas, loadImage } from "canvas";
+import { createCanvas, loadImage, Image } from "@napi-rs/canvas";
 import path from "path";
 
 export const data = new SlashCommandBuilder()
@@ -132,7 +132,7 @@ async function createShipImage(
     path.join(process.cwd(), "altershaper-bot", "dist", backgroundFile),
   ];
 
-  let background: import("canvas").Image | null = null;
+  let background: Image | null = null;
 
   for (const imagePath of possiblePaths) {
     try {
@@ -192,7 +192,7 @@ async function createShipImage(
     ctx.textAlign = "center";
     ctx.fillText(shipName, 960, 952);
 
-    return canvas.toBuffer();
+    return canvas.encode("png");
   } catch (error) {
     console.error("Error creating ship image:", error);
 
@@ -202,7 +202,7 @@ async function createShipImage(
     ctx.font = "bold 66px 'URW Gothic', sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("SHIP", 960, 530);
-    return canvas.toBuffer();
+    return canvas.encode("png");
   }
 }
 

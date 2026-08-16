@@ -1,10 +1,4 @@
-import {
-  createCanvas,
-  loadImage,
-  CanvasRenderingContext2D,
-  CanvasGradient,
-  Image,
-} from "canvas";
+import { createCanvas, loadImage, SKRSContext2D, Image } from "@napi-rs/canvas";
 
 export interface TreeMember {
   name: string;
@@ -278,11 +272,11 @@ export class FamilyTreeRenderer {
       this.drawCard(ctx, members.get(id)!, avatars.get(id)!, pl);
     }
 
-    return canvas.toBuffer("image/png");
+    return canvas.encode("png");
   }
 
   private static drawBackground(
-    ctx: CanvasRenderingContext2D,
+    ctx: SKRSContext2D,
     width: number,
     height: number,
   ): void {
@@ -307,7 +301,7 @@ export class FamilyTreeRenderer {
     ctx.stroke();
   }
 
-  private static legendWidth(ctx: CanvasRenderingContext2D): number {
+  private static legendWidth(ctx: SKRSContext2D): number {
     ctx.font = "20px 'URW Gothic', sans-serif";
     return (
       this.LEGEND.reduce(
@@ -317,7 +311,7 @@ export class FamilyTreeRenderer {
     );
   }
 
-  private static drawLegend(ctx: CanvasRenderingContext2D): void {
+  private static drawLegend(ctx: SKRSContext2D): void {
     ctx.font = "20px 'URW Gothic', sans-serif";
     ctx.textBaseline = "middle";
     ctx.lineWidth = 4;
@@ -369,7 +363,7 @@ export class FamilyTreeRenderer {
   }
 
   private static drawSiblingEdge(
-    ctx: CanvasRenderingContext2D,
+    ctx: SKRSContext2D,
     pa: Placement,
     pb: Placement,
     obs: Rect[],
@@ -411,7 +405,7 @@ export class FamilyTreeRenderer {
   }
 
   private static drawSpouseEdge(
-    ctx: CanvasRenderingContext2D,
+    ctx: SKRSContext2D,
     pa: Placement,
     pb: Placement,
     obs: Rect[],
@@ -440,10 +434,10 @@ export class FamilyTreeRenderer {
   }
 
   private static parentGradient(
-    ctx: CanvasRenderingContext2D,
+    ctx: SKRSContext2D,
     from: RoutePoint,
     to: RoutePoint,
-  ): CanvasGradient {
+  ) {
     const gradient = ctx.createLinearGradient(from.x, from.y, to.x, to.y);
     gradient.addColorStop(0, this.COLORS.parent);
     gradient.addColorStop(1, this.COLORS.child);
@@ -451,7 +445,7 @@ export class FamilyTreeRenderer {
   }
 
   private static drawParentEdge(
-    ctx: CanvasRenderingContext2D,
+    ctx: SKRSContext2D,
     pp: Placement,
     pc: Placement,
     obs: Rect[],
@@ -501,10 +495,7 @@ export class FamilyTreeRenderer {
     }
   }
 
-  private static strokePolyline(
-    ctx: CanvasRenderingContext2D,
-    pts: RoutePoint[],
-  ): void {
+  private static strokePolyline(ctx: SKRSContext2D, pts: RoutePoint[]): void {
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
@@ -739,7 +730,7 @@ export class FamilyTreeRenderer {
   }
 
   private static drawCard(
-    ctx: CanvasRenderingContext2D,
+    ctx: SKRSContext2D,
     member: TreeMember,
     avatar: Image | null,
     p: Placement,
@@ -762,7 +753,8 @@ export class FamilyTreeRenderer {
       gradient.addColorStop(1, "#171A20");
     }
     ctx.fillStyle = gradient;
-    this.roundRect(ctx, x, y, this.NODE_W, this.NODE_H, 14);
+    ctx.beginPath();
+    ctx.roundRect(x, y, this.NODE_W, this.NODE_H, 14);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
@@ -801,26 +793,5 @@ export class FamilyTreeRenderer {
     if (name !== member.name) name += "...";
     ctx.fillStyle = "#FFFFFF";
     ctx.fillText(name, x + this.AVATAR + 28, y + this.NODE_H / 2);
-  }
-
-  private static roundRect(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    radius: number,
-  ): void {
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
   }
 }

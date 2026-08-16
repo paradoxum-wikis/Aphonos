@@ -11,7 +11,7 @@ import {
   ButtonStyle,
   ComponentType,
 } from "discord.js";
-import { createCanvas, loadImage } from "canvas";
+import { createCanvas, loadImage, Image } from "@napi-rs/canvas";
 import path from "path";
 import { generateFighter, Fighter } from "../utils/fighterGenerator.js";
 import { BattleStatsManager } from "../utils/battleStatsManager.js";
@@ -91,7 +91,7 @@ export async function createBattleImage(
     path.join(process.cwd(), "altershaper-bot", "dist", backgroundFileName),
   ];
 
-  let background: import("canvas").Image | null = null;
+  let background: Image | null = null;
 
   for (const imagePath of possiblePaths) {
     try {
@@ -148,7 +148,7 @@ export async function createBattleImage(
       const tempCanvas = createCanvas(512, 512);
       const tempCtx = tempCanvas.getContext("2d");
 
-      let loserAvatar: import("canvas").Image;
+      let loserAvatar: Image;
       let loserX: number;
 
       if (winner.id === fighter1.id) {
@@ -188,7 +188,7 @@ export async function createBattleImage(
     ctx.fillText(fighter1Name, 475, 908);
     ctx.fillText(fighter2Name, 1440, 908);
 
-    return { buffer: canvas.toBuffer(), backgroundFileName };
+    return { buffer: await canvas.encode("png"), backgroundFileName };
   } catch (error) {
     ctx.fillStyle = "#2F3136";
     ctx.fillRect(0, 0, 1920, 1080);
@@ -196,7 +196,10 @@ export async function createBattleImage(
     ctx.font = "bold 66px 'URW Gothic', sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("DEATHBATTLE", 960, 540);
-    return { buffer: canvas.toBuffer(), backgroundFileName: "deathbattle.png" };
+    return {
+      buffer: await canvas.encode("png"),
+      backgroundFileName: "deathbattle.png",
+    };
   }
 }
 
