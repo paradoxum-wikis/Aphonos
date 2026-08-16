@@ -63,6 +63,21 @@ const DEFAULT_STORE: ReactionRoleStoreShape = {
   reactionRoleRules: [],
 };
 
+let cachedPath: string | null = null;
+let cachedStore: ReactionRoleStoreShape | null = null;
+const rulesByMessage = new Map<string, ReactionRoleRule[]>();
+
+function setCache(storePath: string, store: ReactionRoleStoreShape): void {
+  cachedPath = storePath;
+  cachedStore = store;
+  rulesByMessage.clear();
+  for (const rule of store.reactionRoleRules) {
+    const list = rulesByMessage.get(rule.messageId);
+    if (list) list.push(rule);
+    else rulesByMessage.set(rule.messageId, [rule]);
+  }
+}
+
 function isSnowflake(value: unknown): value is string {
   return typeof value === "string" && /^\d{15,25}$/.test(value);
 }
@@ -132,12 +147,15 @@ export function getReactionRoleStorePath(): string {
 export function readReactionRoleStore(
   storePath: string = DEFAULT_STORE_PATH,
 ): ReactionRoleStoreShape {
+  if (cachedStore && cachedPath === storePath) return cachedStore;
+
   try {
     ensureStoreFileExists(storePath);
-
-    const raw = fs.readFileSync(storePath, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    return normalizeStoreShape(parsed);
+    const store = normalizeStoreShape(
+      JSON.parse(fs.readFileSync(storePath, "utf8")) as unknown,
+    );
+    setCache(storePath, store);
+    return store;
   } catch {
     return { ...DEFAULT_STORE };
   }
@@ -159,6 +177,7 @@ export function writeReactionRoleStore(
     JSON.stringify(normalized, null, 2) + "\n",
     "utf8",
   );
+  setCache(storePath, normalized);
 }
 
 /**
@@ -202,8 +221,10 @@ export function addReactionRoleRule(
   );
   if (exists) return false;
 
-  store.reactionRoleRules.push(normalizedRule);
-  writeReactionRoleStore(store, storePath);
+  writeReactionRoleStore(
+    { reactionRoleRules: [...store.reactionRoleRules, normalizedRule] },
+    storePath,
+  );
   return true;
 }
 
@@ -222,10 +243,8 @@ export function removeReactionRoleRule(
   const storePath = params?.storePath ?? DEFAULT_STORE_PATH;
   const store = readReactionRoleStore(storePath);
 
-  const before = store.reactionRoleRules.length;
   const emoji = ident.emoji.trim();
-
-  store.reactionRoleRules = store.reactionRoleRules.filter((r) => {
+  const next = store.reactionRoleRules.filter((r) => {
     if (r.guildId !== ident.guildId) return true;
     if (r.channelId !== ident.channelId) return true;
     if (r.messageId !== ident.messageId) return true;
@@ -233,16 +252,19 @@ export function removeReactionRoleRule(
     return false;
   });
 
-  const removed = store.reactionRoleRules.length !== before;
-  if (removed) writeReactionRoleStore(store, storePath);
-  return removed;
+  if (next.length === store.reactionRoleRules.length) return false;
+  writeReactionRoleStore({ reactionRoleRules: next }, storePath);
+  return true;
 }
 
-/**
- * Matches rules for an observed reaction event.
- *
- * Pass `emojiNameOrId` as: `reaction.emoji.id ?? reaction.emoji.name ?? null`
- */
+export function hasReactionRoleMessage(
+  messageId: string,
+  storePath: string = DEFAULT_STORE_PATH,
+): boolean {
+  readReactionRoleStore(storePath);
+  return rulesByMessage.has(messageId);
+}
+
 export function findMatchingReactionRoleRules(params: {
   guildId: string;
   channelId: string;
@@ -253,11 +275,13 @@ export function findMatchingReactionRoleRules(params: {
   const { guildId, channelId, messageId, emojiNameOrId } = params;
   if (!emojiNameOrId) return [];
 
-  const rules = getReactionRoleRules({ storePath: params.storePath, guildId });
+  readReactionRoleStore(params.storePath ?? DEFAULT_STORE_PATH);
+  const rules = rulesByMessage.get(messageId);
+  if (!rules) return [];
   return rules.filter(
     (r) =>
+      r.guildId === guildId &&
       r.channelId === channelId &&
-      r.messageId === messageId &&
       r.emoji === emojiNameOrId,
   );
 }

@@ -13,6 +13,7 @@ import {
 } from "discord.js";
 import { Command } from "./commandLoader.js";
 import { ReactionRoleHandler } from "./reactionRoleHandler.js";
+import { hasReactionRoleMessage } from "./reactionRoleStore.js";
 import { RolePermissions } from "./rolePermissions.js";
 import { CommandAccessManager } from "./commandAccessManager.js";
 
@@ -22,7 +23,10 @@ export async function handleInteraction(
   interaction: Interaction,
   commands: Collection<string, Command>,
 ): Promise<void> {
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith("job:pick:")) {
+  if (
+    interaction.isStringSelectMenu() &&
+    interaction.customId.startsWith("job:pick:")
+  ) {
     const { handleJobPickMenu } = await import("../commands/job.js");
     await handleJobPickMenu(interaction);
     return;
@@ -184,6 +188,8 @@ export async function handleReactionAdd(
   reaction: MessageReaction | PartialMessageReaction,
   user: User | PartialUser,
 ): Promise<void> {
+  if (!hasReactionRoleMessage(reaction.message.id)) return;
+
   if (reaction.partial) {
     try {
       await reaction.fetch();
@@ -212,6 +218,8 @@ export async function handleReactionRemove(
   reaction: MessageReaction | PartialMessageReaction,
   user: User | PartialUser,
 ): Promise<void> {
+  if (!hasReactionRoleMessage(reaction.message.id)) return;
+
   if (reaction.partial) {
     try {
       await reaction.fetch();
