@@ -602,11 +602,10 @@ export async function execute(
       components: [],
     });
 
-    const battleImageOnly = (await interaction.fetchReply()).attachments
-      .filter((a) => a.name === "deathbattle.png")
-      .toJSON();
-
     await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // edits that 'keep' a subset of attachments drop every file
+    let replaceIntroFiles = Boolean(activeArcana);
 
     const result = await runBattle(fighter1, fighter2, {
       turnCap: 55,
@@ -634,8 +633,9 @@ export async function execute(
 
         await interaction.editReply({
           embeds: [progressEmbed],
-          attachments: battleImageOnly,
+          ...(replaceIntroFiles ? { files: [attachment] } : {}),
         });
+        replaceIntroFiles = false;
       },
     });
 
