@@ -97,11 +97,7 @@ export class BattleStatsManager {
     try {
       await this.ensureDataDirectory();
       const data = await fs.readFile(this.STATS_FILE, "utf-8");
-      return (JSON.parse(data) as BattleStats[]).map((s) => ({
-        ...s,
-        scoredWins: s.scoredWins ?? s.wins,
-        scoredTotalBattles: s.scoredTotalBattles ?? s.totalBattles,
-      }));
+      return JSON.parse(data);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return [];

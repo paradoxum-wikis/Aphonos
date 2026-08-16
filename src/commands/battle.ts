@@ -58,9 +58,7 @@ export const data = new SlashCommandBuilder()
   .addStringOption((option) =>
     option
       .setName("arcana")
-      .setDescription(
-        "Apply an Arcana modifier to the battle (casual only, unranked)",
-      )
+      .setDescription("Apply an Arcana modifier to the battle (casual only)")
       .addChoices(
         ...Object.entries(ARCANA_FULL_NAME).map(([value, name]) => ({
           name,
@@ -604,6 +602,10 @@ export async function execute(
       components: [],
     });
 
+    const battleImageOnly = (await interaction.fetchReply()).attachments
+      .filter((a) => a.name === "deathbattle.png")
+      .toJSON();
+
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     const result = await runBattle(fighter1, fighter2, {
@@ -630,7 +632,10 @@ export async function execute(
             text: `🔒 Arena locked - ${isRanked ? "RANKED " : ""}Battle in progress...`,
           });
 
-        await interaction.editReply({ embeds: [progressEmbed] });
+        await interaction.editReply({
+          embeds: [progressEmbed],
+          attachments: battleImageOnly,
+        });
       },
     });
 
