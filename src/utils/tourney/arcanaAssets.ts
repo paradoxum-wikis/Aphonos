@@ -32,7 +32,7 @@ export function arcanaFullName(id: ArcanaArtId): string {
 }
 
 export const ARCANA_EFFECT: Record<ArcanaArtId, string> = {
-  fool: "If a combatant dodge a hit that would otherwise kill them, part of that damage bounces to the attacker.",
+  fool: "If a combatant dodges a hit that would otherwise kill them, part of that damage bounces to the attacker.",
   empress:
     "Every few turns, the combatant with more HP left gets an ATK buff (later also SPD/DEF).",
   emperor:
