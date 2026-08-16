@@ -10,7 +10,7 @@ import {
   AttachmentBuilder,
 } from "discord.js";
 import { FamilyManager } from "../utils/familyManager.js";
-import { FamilyTreeRenderer } from "../utils/familyTreeRenderer.js";
+import { FamilyTreeRenderer, TreeMember } from "../utils/familyTreeRenderer.js";
 
 export const data = new SlashCommandBuilder()
   .setName("family")
@@ -114,11 +114,9 @@ export async function execute(
       case "tree": {
         const targetUser =
           interaction.options.getUser("user") || interaction.user;
-        const relationships = await FamilyManager.getUserRelationships(
-          targetUser.id,
-        );
+        const graph = await FamilyManager.getFamilyGraph(targetUser.id);
 
-        if (relationships.length === 0) {
+        if (graph.memberIds.length <= 1) {
           await interaction.reply({
             content: `**${targetUser.tag} has no family relationships yet!**`,
             flags: MessageFlags.Ephemeral,
@@ -128,47 +126,37 @@ export async function execute(
 
         await interaction.deferReply();
 
-        const spouseIds = await FamilyManager.getSpouses(targetUser.id);
-        const spouses = await Promise.all(
-          spouseIds.map((id) =>
-            interaction.client.users.fetch(id).catch(() => null),
-          ),
-        ).then((users) =>
-          users.filter((u): u is NonNullable<typeof u> => u !== null),
+        const members = new Map<string, TreeMember>();
+        await Promise.all(
+          graph.memberIds.map(async (id) => {
+            const user =
+              id === targetUser.id
+                ? targetUser
+                : await interaction.client.users.fetch(id).catch(() => null);
+            members.set(
+              id,
+              user
+                ? {
+                    name: user.displayName,
+                    avatarUrl: user.displayAvatarURL({
+                      extension: "png",
+                      size: 128,
+                    }),
+                    isRoot: id === targetUser.id,
+                  }
+                : {
+                    name: "Unknown",
+                    avatarUrl: null,
+                    isRoot: id === targetUser.id,
+                  },
+            );
+          }),
         );
 
-        const childrenIds = await FamilyManager.getChildren(targetUser.id);
-        const children = await Promise.all(
-          childrenIds.map((id) =>
-            interaction.client.users.fetch(id).catch(() => null),
-          ),
-        ).then((users) =>
-          users.filter((u): u is NonNullable<typeof u> => u !== null),
-        );
-
-        const parentIds = await FamilyManager.getParents(targetUser.id);
-        const parents = await Promise.all(
-          parentIds.map((id) =>
-            interaction.client.users.fetch(id).catch(() => null),
-          ),
-        ).then((users) =>
-          users.filter((u): u is NonNullable<typeof u> => u !== null),
-        );
-
-        const siblingIds = await FamilyManager.getSiblings(targetUser.id);
-        const siblings = await Promise.all(
-          siblingIds.map((id) =>
-            interaction.client.users.fetch(id).catch(() => null),
-          ),
-        ).then((users) =>
-          users.filter((u): u is NonNullable<typeof u> => u !== null),
-        );
-
-        const treeBuffer = await FamilyTreeRenderer.generateTree(targetUser, {
-          spouses,
-          parents,
-          children,
-          siblings,
+        const treeBuffer = await FamilyTreeRenderer.generateTree(members, {
+          parents: graph.parents,
+          spouses: graph.spouses,
+          siblings: graph.siblings,
         });
 
         const attachment = new AttachmentBuilder(treeBuffer, {
@@ -1461,9 +1449,9 @@ export async function execute(
     }
   } catch (error) {
     console.error("Error in family command:", error);
-    await interaction.reply({
-      content: "**AN ERROR OCCURRED WHILE PROCESSING YOUR FAMILY REQUEST!**",
-      flags: MessageFlags.Ephemeral,
-    });
+    const content =
+      "**AN ERROR OCCURRED WHILE PROCESSING YOUR FAMILY REQUEST!**";
+    if (interaction.deferred) await interaction.editReply({ content });
+    else await interaction.reply({ content, flags: MessageFlags.Ephemeral });
   }
 }

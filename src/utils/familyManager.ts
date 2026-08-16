@@ -13,6 +13,13 @@ export interface FamilyData {
   relationships: FamilyRelationship[];
 }
 
+export interface FamilyGraph {
+  memberIds: string[];
+  parents: [string, string][];
+  spouses: [string, string][];
+  siblings: [string, string][];
+}
+
 export class FamilyManager {
   private static readonly DATA_DIR = "data";
   private static readonly FAMILY_FILE = `${this.DATA_DIR}/family.json`;
@@ -127,6 +134,52 @@ export class FamilyManager {
     }
 
     return Array.from(siblings);
+  }
+
+  public static async getFamilyGraph(userId: string): Promise<FamilyGraph> {
+    const { relationships } = await this.loadData();
+
+    const adjacency = new Map<string, Set<string>>();
+    const link = (a: string, b: string) => {
+      if (!adjacency.has(a)) adjacency.set(a, new Set([b]));
+      else adjacency.get(a)!.add(b);
+      if (!adjacency.has(b)) adjacency.set(b, new Set([a]));
+      else adjacency.get(b)!.add(a);
+    };
+    for (const rel of relationships) link(rel.userId, rel.relatedUserId);
+
+    const memberIds = [userId];
+    const seen = new Set(memberIds);
+    for (let i = 0; i < memberIds.length; i++) {
+      for (const other of adjacency.get(memberIds[i]) ?? []) {
+        if (!seen.has(other)) {
+          seen.add(other);
+          memberIds.push(other);
+        }
+      }
+    }
+
+    const parents = new Set<string>();
+    const spouses = new Set<string>();
+    const siblings = new Set<string>();
+    for (const rel of relationships) {
+      if (!seen.has(rel.userId) || !seen.has(rel.relatedUserId)) continue;
+      if (rel.relationshipType === "parent") {
+        parents.add(`${rel.userId}>${rel.relatedUserId}`);
+      } else if (rel.relationshipType === "child") {
+        parents.add(`${rel.relatedUserId}>${rel.userId}`);
+      } else {
+        const key = [rel.userId, rel.relatedUserId].sort().join("|");
+        (rel.relationshipType === "spouse" ? spouses : siblings).add(key);
+      }
+    }
+
+    return {
+      memberIds,
+      parents: [...parents].map((k) => k.split(">") as [string, string]),
+      spouses: [...spouses].map((k) => k.split("|") as [string, string]),
+      siblings: [...siblings].map((k) => k.split("|") as [string, string]),
+    };
   }
 
   public static async addRelationship(
