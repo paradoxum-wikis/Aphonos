@@ -13,10 +13,20 @@ import {
 } from "discord.js";
 import { createCanvas, loadImage, Image } from "@napi-rs/canvas";
 import path from "path";
-import { generateFighter, Fighter } from "../utils/fighterGenerator.js";
 import { BattleStatsManager } from "../utils/battleStatsManager.js";
 import { LockManager } from "../utils/lockManager.js";
 import { createHpBar, runBattle } from "../utils/battleEngine.js";
+import {
+  buildArcanaFighters,
+  createArcanaBattleHooks,
+} from "../utils/tourney/arcana.js";
+import {
+  ARCANA_EFFECT,
+  ARCANA_FULL_NAME,
+  arcanaAttachment,
+  arcanaImageUrl,
+  type ArcanaArtId,
+} from "../utils/tourney/arcanaAssets.js";
 
 export const data = new SlashCommandBuilder()
   .setName("battle")
@@ -43,6 +53,28 @@ export const data = new SlashCommandBuilder()
         { name: "True", value: "yes" },
         { name: "False", value: "no" },
       )
+      .setRequired(false),
+  )
+  .addStringOption((option) =>
+    option
+      .setName("arcana")
+      .setDescription(
+        "Apply an Arcana modifier to the battle (casual only, unranked)",
+      )
+      .addChoices(
+        ...Object.entries(ARCANA_FULL_NAME).map(([value, name]) => ({
+          name,
+          value,
+        })),
+      )
+      .setRequired(false),
+  )
+  .addIntegerOption((option) =>
+    option
+      .setName("arcana_level")
+      .setDescription("Power level for referee Arcanas (1 to 3, defaults to 3)")
+      .setMinValue(1)
+      .setMaxValue(3)
       .setRequired(false),
   );
 
@@ -342,6 +374,12 @@ export async function execute(
   const fighter2User = interaction.options.getUser("fighter2")!;
   const rankedOption = interaction.options.getString("ranked") || "no";
   const isRanked = rankedOption === "yes";
+  const arcanaChoice = interaction.options.getString(
+    "arcana",
+  ) as ArcanaArtId | null;
+  const arcanaLevel = (interaction.options.getInteger("arcana_level") ?? 3) as
+    1 | 2 | 3;
+  const activeArcana: ArcanaArtId | null = isRanked ? "justice" : arcanaChoice;
 
   if (isRanked && interaction.guildId !== "1362084781134708907") {
     await interaction.reply({
@@ -384,6 +422,15 @@ export async function execute(
     await interaction.reply({
       content:
         "**For RANKED battles, you must be one of the fighters! You can only challenge others or accept challenges in ranked mode.**",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (isRanked && arcanaChoice) {
+    await interaction.reply({
+      content:
+        "**Arcana modifiers are casual-only! RANKED battles always run under Justice.**",
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -495,17 +542,13 @@ export async function execute(
       fighter2DisplayName = fighter2User.username;
     }
 
-    // Use 90% aura for ranked battles
-    let fighter1: Fighter;
-    let fighter2: Fighter;
-
-    if (isRanked) {
-      fighter1 = generateFighter(fighter1User, fighter1DisplayName, 90);
-      fighter2 = generateFighter(fighter2User, fighter2DisplayName, 90);
-    } else {
-      fighter1 = generateFighter(fighter1User, fighter1DisplayName);
-      fighter2 = generateFighter(fighter2User, fighter2DisplayName);
-    }
+    const [fighter1, fighter2] = buildArcanaFighters(
+      activeArcana,
+      fighter1User,
+      fighter1DisplayName,
+      fighter2User,
+      fighter2DisplayName,
+    );
 
     const imageResult = await createBattleImage(
       fighter1User,
@@ -520,6 +563,8 @@ export async function execute(
     const attachment = new AttachmentBuilder(imageResult.buffer, {
       name: "deathbattle.png",
     });
+    const files = [attachment];
+    if (activeArcana) files.push(arcanaAttachment(activeArcana));
 
     const realmName = getRealmName(imageResult.backgroundFileName);
     const firstMover =
@@ -532,12 +577,17 @@ export async function execute(
       )
       .setDescription(
         `**Two warriors enter the sacred arena of combat!**\n\n` +
-          `${isRanked ? "🏆 **RANKED BATTLE** - Results will affect competitive ratings!\n⚡ **All fighters have been adjusted to 90% aura!**\n\n" : ""}` +
+          (isRanked
+            ? `🏆 **RANKED BATTLE** - Results will affect competitive ratings!\n⚖️ **Justice Arcana** - both fighters have 100% aura!\n\n`
+            : "") +
+          (arcanaChoice
+            ? `🃏 **${ARCANA_FULL_NAME[arcanaChoice]}** - ${ARCANA_EFFECT[arcanaChoice]}\n\n`
+            : "") +
           `**${fighter1.name}** vs **${fighter2.name}**\n\n` +
           `🏃 **${firstMover}** moves first with superior speed!\n\n` +
           `**Fighter Stats:**\n` +
-          `🔴 **${fighter1.name}**: ${fighter1.maxHp} HP | ${fighter1.attack} ATK | ${fighter1.defense} DEF | ${fighter1.speed} SPD${isRanked ? " (90% aura)" : ""}\n` +
-          `🔵 **${fighter2.name}**: ${fighter2.maxHp} HP | ${fighter2.attack} ATK | ${fighter2.defense} DEF | ${fighter2.speed} SPD${isRanked ? " (90% aura)" : ""}\n\n` +
+          `🔴 **${fighter1.name}**: ${fighter1.maxHp} HP | ${fighter1.attack} ATK | ${fighter1.defense} DEF | ${fighter1.speed} SPD\n` +
+          `🔵 **${fighter2.name}**: ${fighter2.maxHp} HP | ${fighter2.attack} ATK | ${fighter2.defense} DEF | ${fighter2.speed} SPD\n\n` +
           `💨 **Speed Advantage:** Higher speed grants +1% dodge chance per point difference\n` +
           `⚔️ **Battle begins in 3 seconds...**`,
       )
@@ -545,11 +595,12 @@ export async function execute(
       .setFooter({
         text: `🔒 Arena locked - ${isRanked ? "RANKED " : ""}Battle in progress...`,
       });
+    if (activeArcana) setupEmbed.setThumbnail(arcanaImageUrl(activeArcana));
 
     await interaction.editReply({
       content: "",
       embeds: [setupEmbed],
-      files: [attachment],
+      files,
       components: [],
     });
 
@@ -559,6 +610,7 @@ export async function execute(
       turnCap: 55,
       realmName,
       turnDelayMs: 2000,
+      hooks: createArcanaBattleHooks(activeArcana, arcanaLevel),
       onTurn: async ({ turn, fighter1: f1, fighter2: f2, battleLog }) => {
         const progressEmbed = new EmbedBuilder()
           .setColor(isRanked ? "#FF6B35" : "#35C2FF")
@@ -594,6 +646,7 @@ export async function execute(
       winner.maxHp,
       isRanked,
       interaction.guildId || undefined,
+      arcanaChoice ?? undefined,
     );
 
     const finalImageResult = await createBattleImage(

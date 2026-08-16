@@ -2,18 +2,15 @@ import type { BattleHooks } from "../battleEngine.js";
 import { generateFighter, type Fighter } from "../fighterGenerator.js";
 import type { User } from "discord.js";
 import type { RoundId, SeriesState, TourneyState } from "./types.js";
-import { ROUND_ARCANA } from "./types.js";
-import {
-  activeRefereeArcanas,
-  allRefereeArcanasAtLevel,
-} from "./bracket.js";
+import { REFEREE_ARCANAS, ROUND_ARCANA } from "./types.js";
+import { activeRefereeArcanas, allRefereeArcanasAtLevel } from "./bracket.js";
 import {
   createRefereeArcanaHooks,
   mergeBattleHooks,
   refereeArcanaLabels,
   type ActiveReferee,
 } from "./refereeArcana.js";
-import { arcanaFullName } from "./arcanaAssets.js";
+import { arcanaFullName, type ArcanaArtId } from "./arcanaAssets.js";
 
 export type RoundArcanaId = (typeof ROUND_ARCANA)[RoundId];
 
@@ -32,26 +29,20 @@ export function hasRoundArcana(round: RoundId, id: RoundArcanaId): boolean {
   return activeRoundArcanas(round).includes(id);
 }
 
-export function buildTourneyFighters(
-  round: RoundId,
+function buildFighters(
+  arcanas: ArcanaArtId[],
   userA: User,
   nameA: string,
   userB: User,
   nameB: string,
-  forceAura?: number,
 ): [Fighter, Fighter] {
-  const force =
-    forceAura !== undefined
-      ? forceAura
-      : hasRoundArcana(round, "justice")
-        ? 100
-        : undefined;
+  const force = arcanas.includes("justice") ? 100 : undefined;
   const a = generateFighter(userA, nameA, force);
   const b = generateFighter(userB, nameB, force);
   a.name = nameA;
   b.name = nameB;
 
-  if (hasRoundArcana(round, "world")) {
+  if (arcanas.includes("world")) {
     a.maxHp *= 4;
     a.hp = a.maxHp;
     b.maxHp *= 4;
@@ -61,14 +52,48 @@ export function buildTourneyFighters(
   return [a, b];
 }
 
-export function createRoundArcanaHooks(round: RoundId): BattleHooks {
-  const star = hasRoundArcana(round, "star");
-  const judgement = hasRoundArcana(round, "judgement");
+export function buildTourneyFighters(
+  round: RoundId,
+  userA: User,
+  nameA: string,
+  userB: User,
+  nameB: string,
+): [Fighter, Fighter] {
+  return buildFighters(activeRoundArcanas(round), userA, nameA, userB, nameB);
+}
+
+function expandArcanaChoice(choice: ArcanaArtId | null): ArcanaArtId[] {
+  if (!choice) return [];
+  return choice === "world"
+    ? ["world", "justice", "star", "judgement"]
+    : [choice];
+}
+
+export function buildArcanaFighters(
+  choice: ArcanaArtId | null,
+  userA: User,
+  nameA: string,
+  userB: User,
+  nameB: string,
+): [Fighter, Fighter] {
+  return buildFighters(expandArcanaChoice(choice), userA, nameA, userB, nameB);
+}
+
+export function createRoundArcanaHooks(arcanas: ArcanaArtId[]): BattleHooks {
+  const star = arcanas.includes("star");
+  const judgement = arcanas.includes("judgement");
   const dmgAtWindowStart: Record<string, number> = {};
   let windowInited = false;
 
   return {
-    afterStep: ({ turn, event, fighter1, fighter2, battleLog, damageDealt }) => {
+    afterStep: ({
+      turn,
+      event,
+      fighter1,
+      fighter2,
+      battleLog,
+      damageDealt,
+    }) => {
       if (!windowInited) {
         dmgAtWindowStart[fighter1.user.id] = 0;
         dmgAtWindowStart[fighter2.user.id] = 0;
@@ -125,7 +150,26 @@ export function createTourneyBattleHooks(
 ): BattleHooks {
   const refs = resolveActiveReferees(state, series);
   return mergeBattleHooks(
-    createRoundArcanaHooks(series.round),
+    createRoundArcanaHooks(activeRoundArcanas(series.round)),
+    createRefereeArcanaHooks(refs),
+  );
+}
+
+export function createArcanaBattleHooks(
+  choice: ArcanaArtId | null,
+  refereeLevel: 1 | 2 | 3 = 3,
+): BattleHooks {
+  const arcanas = expandArcanaChoice(choice);
+
+  const refs: ActiveReferee[] = arcanas.includes("world")
+    ? allRefereeArcanasAtLevel(3)
+    : REFEREE_ARCANAS.filter((a) => arcanas.includes(a)).map((arcana) => ({
+        arcana,
+        level: refereeLevel,
+      }));
+
+  return mergeBattleHooks(
+    createRoundArcanaHooks(arcanas),
     createRefereeArcanaHooks(refs),
   );
 }

@@ -24,6 +24,8 @@ export interface BattleStats {
   losses: number;
   totalBattles: number;
   winRate: number;
+  scoredWins: number; // casual arcana battles are excluded
+  scoredTotalBattles: number;
   weightedScore: number;
   lastCasualBattleAt?: string;
   // Ranked
@@ -47,6 +49,26 @@ export interface BattleRecord {
   winnerMaxHp: number;
   isRanked: boolean;
   guildId: string;
+  arcana?: string;
+}
+
+function blankStats(userId: string, userTag: string): BattleStats {
+  return {
+    userId,
+    userTag,
+    wins: 0,
+    losses: 0,
+    totalBattles: 0,
+    winRate: 0,
+    scoredWins: 0,
+    scoredTotalBattles: 0,
+    weightedScore: 0,
+    rankedWins: 0,
+    rankedLosses: 0,
+    rankedTotalBattles: 0,
+    rankedWinRate: 0,
+    rankedWeightedScore: 0,
+  };
 }
 
 export class BattleStatsManager {
@@ -75,7 +97,11 @@ export class BattleStatsManager {
     try {
       await this.ensureDataDirectory();
       const data = await fs.readFile(this.STATS_FILE, "utf-8");
-      return JSON.parse(data);
+      return (JSON.parse(data) as BattleStats[]).map((s) => ({
+        ...s,
+        scoredWins: s.scoredWins ?? s.wins,
+        scoredTotalBattles: s.scoredTotalBattles ?? s.totalBattles,
+      }));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return [];
@@ -136,6 +162,7 @@ export class BattleStatsManager {
     winnerMaxHp: number,
     isRanked: boolean = false,
     guildId?: string,
+    arcana?: string,
   ): Promise<void> {
     await withFileLock(async () => {
       const stats = await this.readStats();
@@ -155,28 +182,14 @@ export class BattleStatsManager {
         winnerMaxHp,
         isRanked,
         guildId: guildId || "1362084781134708907",
+        arcana,
       };
       records.push(battleRecord);
 
       // winner stat update
       let winnerStats = stats.find((s) => s.userId === winnerId);
       if (!winnerStats) {
-        winnerStats = {
-          userId: winnerId,
-          userTag: winnerTag,
-          wins: 0,
-          losses: 0,
-          totalBattles: 0,
-          winRate: 0,
-          weightedScore: 0,
-          lastCasualBattleAt: undefined,
-          rankedWins: 0,
-          rankedLosses: 0,
-          rankedTotalBattles: 0,
-          rankedWinRate: 0,
-          rankedWeightedScore: 0,
-          lastRankedBattleAt: undefined,
-        };
+        winnerStats = blankStats(winnerId, winnerTag);
         stats.push(winnerStats);
       }
 
@@ -199,9 +212,13 @@ export class BattleStatsManager {
           winnerStats.wins,
           winnerStats.totalBattles,
         );
+        if (!arcana) {
+          winnerStats.scoredWins++;
+          winnerStats.scoredTotalBattles++;
+        }
         winnerStats.weightedScore = this.calculateWeightedScore(
-          winnerStats.wins,
-          winnerStats.totalBattles,
+          winnerStats.scoredWins,
+          winnerStats.scoredTotalBattles,
         );
         winnerStats.lastCasualBattleAt = battleDate;
       }
@@ -211,22 +228,7 @@ export class BattleStatsManager {
       // loser stats update
       let loserStats = stats.find((s) => s.userId === loserId);
       if (!loserStats) {
-        loserStats = {
-          userId: loserId,
-          userTag: loserTag,
-          wins: 0,
-          losses: 0,
-          totalBattles: 0,
-          winRate: 0,
-          weightedScore: 0,
-          lastCasualBattleAt: undefined,
-          rankedWins: 0,
-          rankedLosses: 0,
-          rankedTotalBattles: 0,
-          rankedWinRate: 0,
-          rankedWeightedScore: 0,
-          lastRankedBattleAt: undefined,
-        };
+        loserStats = blankStats(loserId, loserTag);
         stats.push(loserStats);
       }
 
@@ -249,9 +251,12 @@ export class BattleStatsManager {
           loserStats.wins,
           loserStats.totalBattles,
         );
+        if (!arcana) {
+          loserStats.scoredTotalBattles++;
+        }
         loserStats.weightedScore = this.calculateWeightedScore(
-          loserStats.wins,
-          loserStats.totalBattles,
+          loserStats.scoredWins,
+          loserStats.scoredTotalBattles,
         );
         loserStats.lastCasualBattleAt = battleDate;
       }
