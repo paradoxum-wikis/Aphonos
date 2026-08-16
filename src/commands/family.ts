@@ -24,6 +24,14 @@ export const data = new SlashCommandBuilder()
           .setName("user")
           .setDescription("The user whose family tree to view")
           .setRequired(false),
+      )
+      .addBooleanOption((option) =>
+        option
+          .setName("full")
+          .setDescription(
+            "Include distant relatives that aren't directly related",
+          )
+          .setRequired(false),
       ),
   )
   .addSubcommand((subcommand) =>
@@ -114,7 +122,8 @@ export async function execute(
       case "tree": {
         const targetUser =
           interaction.options.getUser("user") || interaction.user;
-        const graph = await FamilyManager.getFamilyGraph(targetUser.id);
+        const full = interaction.options.getBoolean("full") ?? false;
+        const graph = await FamilyManager.getFamilyGraph(targetUser.id, full);
 
         if (graph.memberIds.length <= 1) {
           await interaction.reply({
@@ -166,7 +175,9 @@ export async function execute(
         const embed = new EmbedBuilder()
           .setColor("#cdcdcd")
           .setTitle("🌳 FAMILY TREE")
-          .setDescription(`**${targetUser.tag}**'s big old family tree!`)
+          .setDescription(
+            `**${targetUser.tag}**'s ${full ? "big old " : ""}family tree!`,
+          )
           .setImage("attachment://family-tree.png")
           .setTimestamp();
 

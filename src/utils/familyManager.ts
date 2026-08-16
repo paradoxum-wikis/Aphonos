@@ -136,28 +136,39 @@ export class FamilyManager {
     return Array.from(siblings);
   }
 
-  public static async getFamilyGraph(userId: string): Promise<FamilyGraph> {
+  public static async getFamilyGraph(
+    userId: string,
+    full = true,
+  ): Promise<FamilyGraph> {
     const { relationships } = await this.loadData();
 
-    const adjacency = new Map<string, Set<string>>();
-    const link = (a: string, b: string) => {
-      if (!adjacency.has(a)) adjacency.set(a, new Set([b]));
-      else adjacency.get(a)!.add(b);
-      if (!adjacency.has(b)) adjacency.set(b, new Set([a]));
-      else adjacency.get(b)!.add(a);
-    };
-    for (const rel of relationships) link(rel.userId, rel.relatedUserId);
+    const seen = new Set<string>([userId]);
+    if (full) {
+      const adjacency = new Map<string, Set<string>>();
+      const link = (a: string, b: string) => {
+        if (!adjacency.has(a)) adjacency.set(a, new Set([b]));
+        else adjacency.get(a)!.add(b);
+        if (!adjacency.has(b)) adjacency.set(b, new Set([a]));
+        else adjacency.get(b)!.add(a);
+      };
+      for (const rel of relationships) link(rel.userId, rel.relatedUserId);
 
-    const memberIds = [userId];
-    const seen = new Set(memberIds);
-    for (let i = 0; i < memberIds.length; i++) {
-      for (const other of adjacency.get(memberIds[i]) ?? []) {
-        if (!seen.has(other)) {
-          seen.add(other);
-          memberIds.push(other);
+      const queue = [userId];
+      while (queue.length) {
+        for (const other of adjacency.get(queue.shift()!) ?? []) {
+          if (!seen.has(other)) {
+            seen.add(other);
+            queue.push(other);
+          }
         }
       }
+    } else {
+      for (const rel of relationships) {
+        if (rel.userId === userId) seen.add(rel.relatedUserId);
+        else if (rel.relatedUserId === userId) seen.add(rel.userId);
+      }
     }
+    const memberIds = [...seen];
 
     const parents = new Set<string>();
     const spouses = new Set<string>();
