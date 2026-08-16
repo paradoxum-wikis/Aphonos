@@ -56,6 +56,17 @@ export async function handleInteraction(
       await handleJobContinueButton(interaction);
       return;
     }
+    if (interaction.customId.startsWith("civ:view:")) {
+      const { handleCivBook } = await import("./civ/ui.js");
+      await handleCivBook(interaction);
+      return;
+    }
+  }
+
+  if (interaction.isStringSelectMenu() && interaction.customId === "civ:fac") {
+    const { handleCivBook } = await import("./civ/ui.js");
+    await handleCivBook(interaction);
+    return;
   }
 
   if (interaction.isModalSubmit()) {

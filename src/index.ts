@@ -11,6 +11,11 @@ import {
 } from "discord.js";
 import { loadCommands, Command } from "./utils/commandLoader.js";
 import { hydrateActiveTourneys } from "./utils/tourney/lifecycle.js";
+import {
+  handleCivMessage,
+  hydrateActiveCivs,
+  scheduleAllLiveCivs,
+} from "./utils/civ/index.js";
 import { ReactionRoleHandler } from "./utils/reactionRoleHandler.js";
 import { ConsoleHandler } from "./utils/consoleHandler.js";
 import { registerConsoleCommands } from "./utils/consoleCommands.js";
@@ -70,6 +75,16 @@ class AltershaperBot {
         console.error("[tourney] Failed to hydrate active tourneys:", e);
       }
 
+      try {
+        const n = await hydrateActiveCivs();
+        if (n > 0) {
+          console.log(`[civ] Restored ${n} active Age(s) from disk`);
+          scheduleAllLiveCivs(this.client);
+        }
+      } catch (e) {
+        console.error("[civ] Failed to hydrate:", e);
+      }
+
       this.resolveReady();
     });
 
@@ -79,9 +94,10 @@ class AltershaperBot {
     this.client.on("guildMemberAdd", handleMemberJoin);
     this.client.on("messageReactionAdd", handleReactionAdd);
     this.client.on("messageReactionRemove", handleReactionRemove);
-    this.client.on("messageCreate", (message) =>
-      InterServerChat.handleMessage(message),
-    );
+    this.client.on("messageCreate", (message) => {
+      InterServerChat.handleMessage(message);
+      handleCivMessage(message).catch((e) => console.error("[civ] msg", e));
+    });
   }
 
   private logVisibleChannels(): void {

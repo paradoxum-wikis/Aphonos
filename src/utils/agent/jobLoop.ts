@@ -1,16 +1,10 @@
-import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { createLlmClient, llmExtras, llmModel } from "../llmClient.js";
 import { getMcpSession } from "./mcpSession.js";
 import { prepareToolArgs, toTools } from "./tools.js";
 import { systemPrompt, userPrompt } from "./prompt.js";
 import type { WikiConfig } from "./wikis.js";
 import { pageUrl } from "./wikis.js";
-
-const requireEnv = (key: string) => {
-  const v = process.env[key];
-  if (!v) throw new Error(`${key} is not set`);
-  return v;
-};
 
 const MAX_STEPS = Number(process.env.JOB_MAX_STEPS ?? 20);
 const TIMEOUT_MS = Number(process.env.JOB_TIMEOUT_MS ?? 12 * 60 * 1000);
@@ -61,7 +55,7 @@ export function formatContextUsage(
 
 export async function runJob(input: JobInput): Promise<JobResult> {
   const started = Date.now();
-  const model = requireEnv("LLM_MODEL");
+  const model = llmModel();
   const thinking = input.thinking !== false;
   let peakPromptTokens = 0;
 
@@ -84,21 +78,8 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   const who = await mcp.callTool("whoami", { wiki: input.wiki.mcpKey });
   if (authFailed(who)) throw new Error(`Wiki login failed:\n${who}`);
 
-  const client = new OpenAI({
-    apiKey: requireEnv("LLM_API_KEY"),
-    baseURL: requireEnv("LLM_BASE_URL"),
-  });
-
-  const effort = process.env[
-    thinking ? "LLM_REASONING_EFFORT" : "LLM_REASONING_EFFORT_OFF"
-  ]?.trim();
-  const thinkingType = process.env[
-    thinking ? "LLM_THINKING_TYPE" : "LLM_THINKING_TYPE_OFF"
-  ]?.trim();
-  const extras = {
-    ...(effort ? { reasoning_effort: effort } : {}),
-    ...(thinkingType ? { thinking: { type: thinkingType } } : {}),
-  };
+  const client = createLlmClient();
+  const extras = llmExtras(thinking);
 
   const messages: ChatCompletionMessageParam[] = [
     {
@@ -134,7 +115,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       messages,
       tools,
       ...extras,
-    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
+    } as never);
 
     peakPromptTokens = Math.max(
       peakPromptTokens,
