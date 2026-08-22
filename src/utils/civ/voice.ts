@@ -227,6 +227,11 @@ export async function dream(
       .trim()
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```$/, "");
+    if (!raw) {
+      throw new Error(
+        `empty (${res.choices[0]?.finish_reason ?? "no choice"})`,
+      );
+    }
     const parsed = JSON.parse(raw) as {
       narration?: unknown;
       intents?: unknown;

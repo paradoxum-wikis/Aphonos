@@ -19,15 +19,23 @@ export function chronicle(state: CivState): string {
     )
     .join("\n");
   const ticks = state.log
-    .filter((e) => e.kind === "tick" || e.kind === "lobby" || e.kind === "begin")
+    .filter(
+      (e) =>
+        e.kind === "tick" ||
+        e.kind === "lobby" ||
+        e.kind === "begin" ||
+        e.kind === "complete",
+    )
     .map((e) => {
       const d = e.detail as { tick?: number; lines?: string[] } | undefined;
       const lines = d?.lines?.join(" / ") ?? "";
       return `t${d?.tick ?? "?"} ${e.kind}: ${lines}`;
     })
     .join("\n");
+  const fac = (id?: string) =>
+    (id && state.factions[id]?.name) || id || "none";
   const awards = state.awards
-    ? `chosen=${state.awards.chosen} hegemon=${state.awards.hegemon}`
+    ? `chosen=${fac(state.awards.chosen)} hegemon=${fac(state.awards.hegemon)}`
     : "none yet";
   return [
     `id ${state.id} guild ${state.guildId} phase ${state.phase} ticks ${state.tick}`,
@@ -81,8 +89,12 @@ export async function tellAge(state: CivState): Promise<string[]> {
     max_tokens: 4000,
     ...llmExtrasOff(),
   } as never);
-  const story =
-    res.choices[0]?.message?.content?.trim() || "The Book is blank.";
+  const story = res.choices[0]?.message?.content?.trim() ?? "";
+  if (!story) {
+    throw new Error(
+      `Empty recap (${res.choices[0]?.finish_reason ?? "no choice"}).`,
+    );
+  }
   await saveStory(state.id, story);
   return splitStory(story);
 }

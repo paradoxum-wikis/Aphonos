@@ -26,20 +26,20 @@ export function llmModel(): string {
 }
 
 export function llmExtras(thinking: boolean): Record<string, unknown> {
-  const effort = process.env[
-    thinking ? "LLM_REASONING_EFFORT" : "LLM_REASONING_EFFORT_OFF"
-  ]?.trim();
-  const thinkingType = process.env[
-    thinking ? "LLM_THINKING_TYPE" : "LLM_THINKING_TYPE_OFF"
-  ]?.trim();
+  const effort =
+    process.env[
+      thinking ? "LLM_REASONING_EFFORT" : "LLM_REASONING_EFFORT_OFF"
+    ]?.trim();
+  const thinkingType =
+    process.env[
+      thinking ? "LLM_THINKING_TYPE" : "LLM_THINKING_TYPE_OFF"
+    ]?.trim();
   return {
-    ...(effort ? { reasoning_effort: effort } : {}),
-    ...(thinkingType
-      ? { extra_body: { thinking: { type: thinkingType } } }
-      : {}),
+    ...(effort && effort !== "none" ? { reasoning_effort: effort } : {}),
+    ...(thinkingType ? { thinking: { type: thinkingType } } : {}),
   };
 }
 
 export function llmExtrasOff(): Record<string, unknown> {
-  return { extra_body: { thinking: { type: "disabled" } } };
+  return { thinking: { type: "disabled" } };
 }
