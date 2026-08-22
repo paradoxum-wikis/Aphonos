@@ -332,7 +332,7 @@ export async function narrate(
     {
       role: "user",
       content: [
-        "Narrate as Aphonos in under 500 characters. FACTS are what happened. Chat is what they tried. You may invent color and dialogue. You may NOT invent a win, a merge, or a stat change the FACTS did not do. If they bombed a stronger faction and the Book says they broke, they broke. Faction names are real even if they are not on the map. Names that match no province and no faction stay flavor. Do not mention the hidden Decree.",
+        "Narrate as Aphonos. Cover every FACT. Short, vulgar, and most importantly, funny. Stop yourself under 1200 characters and end on a finished sentence, never mid-word. Do not reprint FACTS/CHAT headers. FACTS are what happened. Chat is what they tried. You may invent color and dialogue. You may NOT invent a win, a merge, or a stat change the FACTS did not do. If they bombed a stronger faction and the Book says they broke, they broke. Faction names are real even if they are not on the map. Names that match no province and no faction stay flavor. Do not mention the hidden Decree.",
         worldDigest(state, kin),
         "",
         "CHAT:",
@@ -352,9 +352,9 @@ export async function narrate(
   const res = await client.chat.completions.create({
     model: llmModel(),
     messages,
-    max_tokens: 220,
+    max_tokens: 500,
     ...llmExtrasOff(),
   } as never);
   const text = res.choices[0]?.message?.content?.trim() ?? "";
-  return text.slice(0, 500) || rawNarration(result);
+  return text || rawNarration(result);
 }
