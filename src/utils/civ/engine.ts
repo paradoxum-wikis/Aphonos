@@ -42,6 +42,15 @@ function cap(n: number, lo: number, hi = Infinity): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
+function bump(
+  p: Participant | undefined,
+  key: "farmed" | "gathered" | "killed" | "enslaved",
+  n: number,
+): void {
+  if (!p || n <= 0) return;
+  p[key] = (p[key] ?? 0) + n;
+}
+
 export function power(state: CivState, f: Faction): number {
   const members = f.memberIds.map((id) => state.participants[id]);
   const free = members.some((p) => isFree(p));
@@ -161,7 +170,10 @@ export function killPerson(
 ): void {
   if (victim.dead) return;
   victim.dead = true;
-  if (killerId) victim.killedBy = killerId;
+  if (killerId) {
+    victim.killedBy = killerId;
+    bump(state.participants[killerId], "killed", 1);
+  }
   const fac = victim.factionId ? state.factions[victim.factionId] : undefined;
   if (fac) {
     fac.pop = cap(fac.pop - 1, 0);
@@ -239,6 +251,7 @@ function takeSlaves(
   loser: Faction,
   lines: string[],
   all: boolean,
+  by?: Participant,
 ): void {
   if (!state.factions[winner.id] || !state.factions[loser.id]) return;
   const prey = loser.memberIds
@@ -256,6 +269,7 @@ function takeSlaves(
     taken.push(person.displayName);
   }
   if (taken.length) {
+    bump(by, "enslaved", taken.length);
     lines.push(`${taken.join(", ")} enslaved by ${winner.name}.`);
   }
 }
@@ -267,6 +281,7 @@ function loseProvince(
   kin: KinEdge[],
   lines: string[],
   attacker?: Faction,
+  by?: Participant,
 ): void {
   const wasCapital = faction.capital === p.id;
   p.owner = null;
@@ -309,7 +324,7 @@ function loseProvince(
   if (!still.length) {
     faction.capital = null;
     if (attacker && state.factions[attacker.id]) {
-      takeSlaves(state, attacker, faction, lines, true);
+      takeSlaves(state, attacker, faction, lines, true, by);
       if (state.factions[faction.id]) {
         absorbFaction(
           state,
@@ -558,6 +573,7 @@ function doEnslave(state: CivState, intent: PlayerIntent, lines: string[]): void
     return;
   }
   movePerson(state, mark, mine, true, lines);
+  bump(actor, "enslaved", 1);
   lines.push(`${mark.displayName} is enslaved by ${mine.name}.`);
 }
 
@@ -647,8 +663,10 @@ function doBuild(state: CivState, intent: PlayerIntent, lines: string[]): void {
   const want = wantedBuild(intent.note);
   const key = want ? `${p.development}>${want}` : undefined;
   if (want === "farm" && p.development !== "empty") {
-    const got = yieldOf(state.participants[intent.userId], 2, true);
+    const actor = state.participants[intent.userId];
+    const got = yieldOf(actor, 2, true);
     f.food += got;
+    bump(actor, "farmed", got);
     lines.push(`${f.name} farms ${p.name}. +${got} food.`);
     return;
   }
@@ -657,8 +675,10 @@ function doBuild(state: CivState, intent: PlayerIntent, lines: string[]): void {
   )?.[1];
   if (!spec) {
     if (/\bfarm|wheat|crop/i.test(intent.note ?? "")) {
-      const got = yieldOf(state.participants[intent.userId], 2, true);
+      const actor = state.participants[intent.userId];
+      const got = yieldOf(actor, 2, true);
       f.food += got;
+      bump(actor, "farmed", got);
       lines.push(`${f.name} farms ${p.name}. +${got} food.`);
       return;
     }
@@ -889,6 +909,7 @@ function doEat(state: CivState, intent: PlayerIntent, lines: string[]): void {
       const took = yieldOf(actor, Math.min(3, other.food));
       other.food -= took;
       f.food += took;
+      bump(actor, "gathered", took);
       lines.push(
         `${actor.displayName} steals ${took} food from ${other.name}.`,
       );
@@ -1056,13 +1077,14 @@ function doMarch(
     return;
   }
   if (def.arms <= 0) {
-    loseProvince(state, def, p, kin, lines, f);
+    loseProvince(state, def, p, kin, lines, f, state.participants[intent.userId]);
     p.owner = f.id;
     p.garrison = 1;
     if (!f.capital) f.capital = p.id;
     f.marchesWon += 1;
     lines.push(`${f.name} walks into empty ${p.name}.`);
-    if (state.factions[def.id]) takeSlaves(state, f, def, lines, false);
+    if (state.factions[def.id])
+      takeSlaves(state, f, def, lines, false, state.participants[intent.userId]);
     return;
   }
   const atk =
@@ -1076,7 +1098,7 @@ function doMarch(
   if (roll < chance) {
     def.arms = Math.floor(def.arms * 0.4);
     f.arms = Math.max(0, Math.floor(f.arms * 0.85) - 1);
-    loseProvince(state, def, p, kin, lines, f);
+    loseProvince(state, def, p, kin, lines, f, state.participants[intent.userId]);
     p.owner = f.id;
     p.garrison = 1;
     if (!f.capital) f.capital = p.id;
@@ -1084,7 +1106,8 @@ function doMarch(
     lines.push(
       `${f.name} takes ${p.name} from ${def.name} (${Math.round(chance * 100)}%).`,
     );
-    if (state.factions[def.id]) takeSlaves(state, f, def, lines, false);
+    if (state.factions[def.id])
+      takeSlaves(state, f, def, lines, false, state.participants[intent.userId]);
   } else {
     f.arms = Math.floor(f.arms * 0.4);
     def.arms = Math.floor(def.arms * 0.85);
@@ -1326,6 +1349,11 @@ function applyInventions(
     if (f) {
       f.food = Math.max(0, f.food + (inv.food ?? 0));
       f.material = Math.max(0, f.material + (inv.material ?? 0));
+      bump(
+        actor,
+        "gathered",
+        Math.max(0, inv.food ?? 0) + Math.max(0, inv.material ?? 0),
+      );
       f.faith = Math.max(0, f.faith + (inv.faith ?? 0));
       f.arms = Math.max(0, f.arms + (inv.arms ?? 0));
       f.pop = Math.max(0, f.pop + (inv.pop ?? 0));

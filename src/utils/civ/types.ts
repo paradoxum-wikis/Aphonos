@@ -77,6 +77,10 @@ export interface Participant {
   dead?: boolean;
   killedBy?: string;
   bond?: "slave";
+  farmed?: number;
+  gathered?: number;
+  killed?: number;
+  enslaved?: number;
 }
 
 export interface Faction {

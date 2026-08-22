@@ -76,3 +76,23 @@ export function deadLine(state: CivState): string {
   if (!dead.length) return "";
   return `Ghosts: ${dead.map((p) => p.displayName).join(", ")}`;
 }
+
+export function playerRoll(state: CivState): string[] {
+  const best = (
+    key: "farmed" | "gathered" | "killed" | "enslaved",
+    label: string,
+  ): string | undefined => {
+    let win: { name: string; n: number } | undefined;
+    for (const p of Object.values(state.participants)) {
+      const n = p[key] ?? 0;
+      if (n > (win?.n ?? 0)) win = { name: p.displayName, n };
+    }
+    return win ? `${win.name} ${label} (${win.n})` : undefined;
+  };
+  return [
+    best("farmed", "farmed the most"),
+    best("gathered", "gathered the most"),
+    best("killed", "killed the most"),
+    best("enslaved", "enslaved the most"),
+  ].filter((s): s is string => !!s);
+}

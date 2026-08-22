@@ -6,17 +6,23 @@ import type { CivState } from "./types.js";
 const DISCORD_CHUNK = 1900;
 
 export function chronicle(state: CivState): string {
+  const who = (id?: string) =>
+    (id && state.participants[id]?.displayName) || id || "?";
+  const fac = (id?: string) => (id && state.factions[id]?.name) || id || "none";
   const people = Object.values(state.participants)
-    .map(
-      (p) =>
-        `${p.displayName}${p.dead ? " (ghost)" : ""} faction=${state.factions[p.factionId ?? ""]?.name ?? "none"}`,
-    )
-    .join("; ");
+    .map((p) => {
+      const bits = [p.displayName, `banner=${fac(p.factionId ?? undefined)}`];
+      if (p.dead)
+        bits.push(p.killedBy ? `ghost killedBy ${who(p.killedBy)}` : "ghost");
+      if (p.bond === "slave") bits.push("slave");
+      return bits.join(", ");
+    })
+    .join("\n");
   const factions = Object.values(state.factions)
-    .map(
-      (f) =>
-        `${f.name}: food ${f.food}, arms ${f.arms}, land ${state.provinces.filter((p) => p.owner === f.id).length}, members ${f.memberIds.map((id) => state.participants[id]?.displayName ?? id).join(",")}`,
-    )
+    .map((f) => {
+      const land = state.provinces.filter((p) => p.owner === f.id).length;
+      return `${f.name} founder=${who(f.founderId)} members=${f.memberIds.map(who).join(",")} land=${land} food=${f.food} arms=${f.arms} faith=${f.faith} marchesWon=${f.marchesWon}`;
+    })
     .join("\n");
   const ticks = state.log
     .filter(
@@ -32,14 +38,13 @@ export function chronicle(state: CivState): string {
       return `t${d?.tick ?? "?"} ${e.kind}: ${lines}`;
     })
     .join("\n");
-  const fac = (id?: string) =>
-    (id && state.factions[id]?.name) || id || "none";
-  const awards = state.awards
-    ? `chosen=${fac(state.awards.chosen)} hegemon=${fac(state.awards.hegemon)}`
+  const a = state.awards;
+  const awards = a
+    ? `chosen=${fac(a.chosen)} hegemon=${fac(a.hegemon)} priest=${fac(a.priest)} warmonger=${fac(a.warmonger)} kin-right=${who(a.kinRight)} fallen=${fac(a.fallen)}`
     : "none yet";
   return [
-    `id ${state.id} guild ${state.guildId} phase ${state.phase} ticks ${state.tick}`,
-    `people: ${people || "none"}`,
+    `phase ${state.phase} ticks ${state.tick}`,
+    `people:\n${people || "none"}`,
     `factions:\n${factions || "none"}`,
     `awards: ${awards}`,
     `events:\n${ticks || "none"}`,
@@ -71,10 +76,12 @@ export async function tellAge(state: CivState): Promise<string[]> {
     {
       role: "system",
       content: [
-        "You are Aphonos. Write a readable chronicle of this Discord civilization Age.",
-        "Hilarious, vulgar, short chapters. Use the real names and FACTS. Do not invent a different winner or reverse deaths.",
+        "You are Aphonos. Chronicle this Discord civilization Age.",
+        "Hilarious, vulgar, short chapters. Real names. FACTS only. Do not invent a winner or reverse deaths. Do not retell the same beat twice.",
+        "Keep faction titles (Chosen, Hegemon, High Priest, Warmonger, Fallen).",
+        "End with a closing roll: banners first, then PEOPLE. Name players and what they did (founded X, ate Y, died to Z, enslaved, kin-right). Skip spectators. Do not credit a person unless the FACTS name them.",
         "You may color scenes. Do not mention hidden decrees unless the Age is complete.",
-        "Plain text. No markdown headings longer than a line. No code fences.",
+        "Plain text. No long headings. No code fences.",
       ].join(" "),
     },
     {

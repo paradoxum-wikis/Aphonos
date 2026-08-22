@@ -11,7 +11,7 @@ import {
   type StringSelectMenuInteraction,
 } from "discord.js";
 import { labelFaction } from "./awards.js";
-import { deadLine } from "./digest.js";
+import { deadLine, playerRoll } from "./digest.js";
 import { power } from "./engine.js";
 import { renderCivMap } from "./mapRenderer.js";
 import { getActiveCiv, ownedBy } from "./state.js";
@@ -319,26 +319,26 @@ export function abortEmbed(): EmbedBuilder {
 export function judgementEmbed(state: CivState): EmbedBuilder {
   const a = state.awards;
   const fields = [
-    ["The Chosen", labelFaction(state, a?.chosen)],
-    ["Hegemon", labelFaction(state, a?.hegemon)],
-    ["High Priest", labelFaction(state, a?.priest)],
-    ["Warmonger", labelFaction(state, a?.warmonger)],
+    ["Winner", labelFaction(state, a?.chosen)],
+    ["Most land", labelFaction(state, a?.hegemon)],
+    ["Most faith", labelFaction(state, a?.priest)],
+    ["Most battles", labelFaction(state, a?.warmonger)],
     [
-      "Kin-Right",
+      "Biggest family",
       a?.kinRight
         ? (state.participants[a.kinRight]?.displayName ?? a.kinRight)
         : "-",
     ],
-    ["The Fallen", labelFaction(state, a?.fallen)],
+    ["First to fall", labelFaction(state, a?.fallen)],
   ];
-  const dead = deadLine(state);
+  const people = playerRoll(state).join("\n");
   return new EmbedBuilder()
     .setColor(CIV_COLOR)
-    .setTitle("Judgement")
+    .setTitle("The Age is over")
     .setDescription(
       a?.chosen
-        ? `**${labelFaction(state, a.chosen)}** takes the Age.`
-        : "No faction left standing.",
+        ? `**${labelFaction(state, a.chosen)}** won.`
+        : "Nobody won.",
     )
     .addFields([
       ...fields.map(([name, value]) => ({
@@ -346,6 +346,8 @@ export function judgementEmbed(state: CivState): EmbedBuilder {
         value: String(value),
         inline: true,
       })),
-      ...(dead ? [{ name: "Ghosts", value: dead, inline: false }] : []),
+      ...(people
+        ? [{ name: "People", value: people.slice(0, 1024), inline: false }]
+        : []),
     ]);
 }
