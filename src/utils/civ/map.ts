@@ -111,6 +111,17 @@ function neighborsOf(id: string): string[] {
 
 export const PROVINCE_IDS = GRID.flat() as string[];
 
+const POS: Record<string, readonly [number, number]> = {};
+for (let r = 0; r < 4; r++) {
+  for (let c = 0; c < 4; c++) POS[GRID[r][c]] = [r, c];
+}
+
+export function gridDist(a: string, b: string): number {
+  const [r1, c1] = POS[a];
+  const [r2, c2] = POS[b];
+  return Math.max(Math.abs(r1 - r2), Math.abs(c1 - c2));
+}
+
 export function createMap(): Province[] {
   return PROVINCE_IDS.map((id) => {
     const m = META[id];

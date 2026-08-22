@@ -6,6 +6,7 @@ export const MAX_TICKS = 180;
 export const REGENCY_SILENT = 18;
 export const WORLD_EVERY = 6;
 export const INTENTS_PER_USER = 2;
+export const MAX_FACTIONS = 4;
 
 export type Terrain = "plain" | "waste" | "coast" | "high" | "grove";
 export type Development =

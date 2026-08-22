@@ -1,5 +1,5 @@
 import { hashString } from "../fighterGenerator.js";
-import { terrainAtk, terrainDef } from "./map.js";
+import { gridDist, terrainAtk, terrainDef } from "./map.js";
 import { fireSetPiece } from "./setpiece.js";
 import {
   appendLog,
@@ -13,6 +13,7 @@ import {
 } from "./state.js";
 import {
   INTENTS_PER_USER,
+  MAX_FACTIONS,
   REGENCY_SILENT,
   WORLD_EVERY,
   type CivState,
@@ -107,13 +108,26 @@ function facOf(state: CivState, userId: string): Faction | undefined {
   return id ? state.factions[id] : undefined;
 }
 
+function nearOwned(state: CivState, id: string): boolean {
+  return state.provinces.some((p) => p.owner && gridDist(p.id, id) < 2);
+}
+
 function nextSpawn(state: CivState): Province | undefined {
-  while (state.spawnQueue.length) {
-    const id = state.spawnQueue.shift()!;
-    const p = state.provinces.find((x) => x.id === id);
-    if (p && !p.owner) return p;
-  }
-  return state.provinces.find((p) => !p.owner);
+  const take = (ok: (p: Province) => boolean) => {
+    const i = state.spawnQueue.findIndex((id) => {
+      const p = state.provinces.find((x) => x.id === id);
+      return p && !p.owner && ok(p);
+    });
+    if (i < 0) return undefined;
+    const id = state.spawnQueue.splice(i, 1)[0];
+    return state.provinces.find((x) => x.id === id);
+  };
+  return (
+    take((p) => !nearOwned(state, p.id)) ??
+    take(() => true) ??
+    state.provinces.find((p) => !p.owner && !nearOwned(state, p.id)) ??
+    state.provinces.find((p) => !p.owner)
+  );
 }
 
 function grantCapital(state: CivState, faction: Faction, p: Province): void {
@@ -359,6 +373,10 @@ function doFound(
   }
   if (findFaction(state, name)) {
     lines.push(`${name} already exists.`);
+    return;
+  }
+  if (Object.keys(state.factions).length >= MAX_FACTIONS) {
+    lines.push(`${p.displayName} can't found. Four banners already.`);
     return;
   }
   let id = `f_${slug(name)}`;

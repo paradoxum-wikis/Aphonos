@@ -47,7 +47,7 @@ export function rulesEmbed(): EmbedBuilder {
     .setDescription(
       [
         "**Speak in this channel**: every ~10s the Book turns and acts on what was said.",
-        '**Found/join** a faction ("found Israel", "join Toru Dynasty"). Unaffiliated can only found/join.',
+        '**Found/join** a faction ("found Israel", "join Toru Dynasty"). Max 4 factions. Unaffiliated can only found/join.',
         '**Claim**: "settle city" or "march Israel" to take provinces. Farm feeds, temple prays, workshop forges, walls defend.',
         '**Fight**: "bomb Toru Dynasty", "eat Adachi", "annex Y", "muster" arms. Higher arms/power wins.',
         '**Deal**: "trade/merge/nap with Y". "pray" for omens, "spy on Y" for intel.',

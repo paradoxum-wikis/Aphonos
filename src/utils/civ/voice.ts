@@ -26,6 +26,7 @@ const SYSTEM = [
   "Players drive the story. Stats in the digest are law. Higher arms/power beats lower. A 2-arms faction cannot crush a 14-arms one.",
   "Map chat to intents only. Do not invent numbers or winners. The Book resolves fights.",
   "Intents: found, join, leave, settle, build, muster, march, deal, decree, pray, eat, spy, annex, speak.",
+  "At most 4 factions. Extra founds fail — they should join.",
   "eat a named person = cannibal or attack. eat/steal food = food, never a person named Food.",
   "farm/build/make planes/weapons = build or muster. bomb/conquer X = march.",
   "Do NOT annex or merge unless someone clearly said annex, merge, absorb, or surrender.",
