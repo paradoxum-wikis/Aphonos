@@ -35,7 +35,7 @@ const VIEWS: { id: BookView; label: string }[] = [
 export function openingText(): string {
   return [
     "**Faction talk.** Speak here and you're in.",
-    "Found a faction or join one — say it. Name's free, it's yours. Talk it out.",
+    "Found a faction or join one - say it. Name's free, it's yours. Talk it out.",
     "The Age has not started. No land, no war, no harvest. When the room is ready, the owner begins it.",
   ].join("\n");
 }
@@ -77,7 +77,7 @@ function living(state: CivState, f: Faction): string {
 }
 
 function header(state: CivState): string {
-  if (state.phase === "factions") return "Faction talk — Age not started";
+  if (state.phase === "factions") return "Faction talk - Age not started";
   return `Tick **${state.tick}** · ${bandFor(state.tick)} · ${Object.keys(state.factions).length} factions`;
 }
 
@@ -90,7 +90,7 @@ function overviewFields(
   }
   return facs.slice(0, 12).map((f) => {
     const land = ownedBy(state, f.id);
-    const cap = land.find((p) => p.id === f.capital)?.name ?? "—";
+    const cap = land.find((p) => p.id === f.capital)?.name ?? "-";
     const stats =
       state.phase === "factions"
         ? living(state, f)
@@ -126,7 +126,7 @@ function deadValue(state: CivState): string {
         const by = p.killedBy
           ? (state.participants[p.killedBy]?.displayName ?? p.killedBy)
           : "?";
-        return `**${p.displayName}** — slain by ${by} · still plays`;
+        return `**${p.displayName}** - slain by ${by}`;
       })
       .join("\n"),
     4000,
@@ -327,7 +327,7 @@ export function judgementEmbed(state: CivState): EmbedBuilder {
       "Kin-Right",
       a?.kinRight
         ? (state.participants[a.kinRight]?.displayName ?? a.kinRight)
-        : "—",
+        : "-",
     ],
     ["The Fallen", labelFaction(state, a?.fallen)],
   ];

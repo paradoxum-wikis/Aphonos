@@ -133,6 +133,6 @@ export function computeAwards(
 }
 
 export function labelFaction(state: CivState, id?: string): string {
-  if (!id) return "—";
+  if (!id) return "-";
   return state.factions[id]?.name ?? id;
 }

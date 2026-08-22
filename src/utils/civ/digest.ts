@@ -21,7 +21,7 @@ export function worldDigest(state: CivState, kin: KinEdge[]): string {
         ),
       ),
     ].join(", ");
-    return `${f.name} [${f.id}] members=${members} capital=${f.capital ?? "none"} land=${land || "none"} food=${f.food} mat=${f.material} faith=${f.faith} arms=${f.arms} pop=${f.pop} unrest=${f.unrest} power=${power(state, f).toFixed(1)} neighbors=${neighbors || "—"}`;
+    return `${f.name} [${f.id}] members=${members} capital=${f.capital ?? "none"} land=${land || "none"} food=${f.food} mat=${f.material} faith=${f.faith} arms=${f.arms} pop=${f.pop} unrest=${f.unrest} power=${power(state, f).toFixed(1)} neighbors=${neighbors || "-"}`;
   });
   const people = Object.values(state.participants)
     .map(
@@ -64,10 +64,10 @@ export function recapLines(state: CivState): string[] {
       .map((id) => state.participants[id]?.displayName ?? id)
       .join(", ");
     if (state.phase === "factions") {
-      return `**${f.name}** — ${members || "empty"}`;
+      return `**${f.name}** - ${members || "empty"}`;
     }
     const land = ownedBy(state, f.id).length;
-    return `**${f.name}** — ${members} · ${land} land · pop ${f.pop} · food ${f.food} · arms ${f.arms} · faith ${f.faith}`;
+    return `**${f.name}** - ${members} · ${land} land · pop ${f.pop} · food ${f.food} · arms ${f.arms} · faith ${f.faith}`;
   });
 }
 
