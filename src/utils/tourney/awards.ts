@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { container, text } from "../v2.js";
 import {
   deepestRoundReached,
   getExoChampion,
@@ -64,8 +64,7 @@ export function computeAwards(state: TourneyState): TourneyAwards {
       ) ?? getTournamentChampion(state),
     refOfTheTournament: pickTop(
       state.referees.map((r) => r.userId),
-      (id) =>
-        (state.refGamesOfficiated[id] ?? 0) + (state.betPoints[id] ?? 0),
+      (id) => (state.refGamesOfficiated[id] ?? 0) + (state.betPoints[id] ?? 0),
       (id) => betWeight(state, id),
     ),
     gamblingAddict: pickTop(
@@ -79,18 +78,17 @@ export function computeAwards(state: TourneyState): TourneyAwards {
   return awards;
 }
 
-export function awardsEmbed(state: TourneyState): EmbedBuilder {
+export function awardsContainer(state: TourneyState) {
   const a = state.awards ?? computeAwards(state);
   const line = (label: string, userId?: string) =>
     userId
-      ? `**${label}**\n<@${userId}> - ${nameOf(state, userId)}`
+      ? `**${label}**\n<@${userId}> — ${nameOf(state, userId)}`
       : `**${label}**\n-`;
 
-  return new EmbedBuilder()
-    .setColor(COLOR.finals)
-    .setTitle("Results")
-    .setDescription(
+  return container(COLOR.finals).addTextDisplayComponents(
+    text(
       [
+        "## Results",
         line("Champion", a.tournamentChampion),
         line("Exo", a.exoChampion),
         line("Two X", a.twoXChampion),
@@ -98,5 +96,6 @@ export function awardsEmbed(state: TourneyState): EmbedBuilder {
         line("ROT", a.refOfTheTournament),
         line("Gambling Addict", a.gamblingAddict),
       ].join("\n\n"),
-    );
+    ),
+  );
 }

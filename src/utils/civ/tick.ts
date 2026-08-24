@@ -2,16 +2,13 @@ import type { Client, MessageCreateOptions } from "discord.js";
 import { liveKin } from "./family.js";
 import { computeAwards } from "./awards.js";
 import { resolveLobby, resolveTick } from "./engine.js";
-import {
-  endTick,
-  finishCiv,
-  tryBeginTick,
-} from "./lifecycle.js";
+import { endTick, finishCiv, tryBeginTick } from "./lifecycle.js";
 import { saveActiveCiv } from "./log.js";
 import { allActiveCivs, getActiveCiv, setActiveCiv } from "./state.js";
 import { TICK_MS, WORLD_EVERY, type CivState } from "./types.js";
 import { bookSig } from "./digest.js";
-import { judgementEmbed, recapPayload } from "./ui.js";
+import { judgementContainer, recapPayload } from "./ui.js";
+import { text as v2text, V2 } from "../v2.js";
 import { dream, narrate, rawNarration } from "./voice.js";
 import { takeBuffer } from "./watcher.js";
 
@@ -30,14 +27,11 @@ export function scheduleCivTick(
 ): void {
   stopCivTimer(guildId);
   const state = getActiveCiv(guildId);
-  if (!state || (state.phase !== "live" && state.phase !== "factions"))
-    return;
+  if (!state || (state.phase !== "live" && state.phase !== "factions")) return;
   timers.set(
     guildId,
     setTimeout(() => {
-      runCivTick(client, guildId).catch((e) =>
-        console.error("[civ] tick", e),
-      );
+      runCivTick(client, guildId).catch((e) => console.error("[civ] tick", e));
     }, delay),
   );
 }
@@ -99,10 +93,14 @@ export async function runCivTick(
       setActiveCiv(state);
       await saveActiveCiv(state);
       if (result.lines.length || thought.narration || force) {
-        await post(client, state, {
-          content: thought.narration || rawNarration(result),
-          ...(showBook ? recapPayload(state) : {}),
-        });
+        const narration = thought.narration || rawNarration(result);
+        await post(
+          client,
+          state,
+          showBook
+            ? recapPayload(state, "overview", undefined, narration)
+            : { content: narration },
+        );
       }
       again("factions");
       return;
@@ -122,22 +120,23 @@ export async function runCivTick(
       await finishCiv(state);
       stopCivTimer(guildId);
       await post(client, state, {
-        content: text,
-        embeds: [judgementEmbed(state)],
+        components: [v2text(text), judgementContainer(state)],
+        flags: V2,
       });
       return;
     }
 
     const showBook =
-      bookSig(state) !== before ||
-      force ||
-      state.tick % WORLD_EVERY === 0;
+      bookSig(state) !== before || force || state.tick % WORLD_EVERY === 0;
     setActiveCiv(state);
     await saveActiveCiv(state);
-    await post(client, state, {
-      content: text,
-      ...(showBook ? recapPayload(state) : {}),
-    });
+    await post(
+      client,
+      state,
+      showBook
+        ? recapPayload(state, "overview", undefined, text)
+        : { content: text },
+    );
     again("live");
   } finally {
     endTick(guildId);
@@ -148,7 +147,10 @@ export async function runCivTick(
   }
 }
 
-export async function judgeCivNow(client: Client, guildId: string): Promise<boolean> {
+export async function judgeCivNow(
+  client: Client,
+  guildId: string,
+): Promise<boolean> {
   const state = getActiveCiv(guildId);
   if (!state) return false;
   if (!tryBeginTick(guildId)) throw new Error("A tick is already running.");
@@ -157,7 +159,10 @@ export async function judgeCivNow(client: Client, guildId: string): Promise<bool
     state.awards = computeAwards(state, kin);
     await finishCiv(state);
     stopCivTimer(guildId);
-    await post(client, state, { embeds: [judgementEmbed(state)] });
+    await post(client, state, {
+      components: [judgementContainer(state)],
+      flags: V2,
+    });
     return true;
   } finally {
     endTick(guildId);

@@ -6,7 +6,7 @@ import {
 import { llmReady } from "../utils/llmClient.js";
 import {
   abortCiv,
-  abortEmbed,
+  abortContainer,
   beginAge,
   beginText,
   getActiveCiv,
@@ -18,13 +18,14 @@ import {
   pauseCiv,
   recapPayload,
   resumeCiv,
-  rulesEmbed,
+  rulesContainer,
   runCivTick,
   scheduleCivTick,
   startCiv,
   stopCivTimer,
   tellAge,
 } from "../utils/civ/index.js";
+import { text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("civilization")
@@ -140,7 +141,10 @@ export async function execute(
       });
       return;
     }
-    await interaction.reply({ embeds: [abortEmbed()] });
+    await interaction.reply({
+      components: [abortContainer()],
+      flags: V2,
+    });
     return;
   }
 
@@ -150,9 +154,12 @@ export async function execute(
       const state = await startCiv(guildId, interaction.channelId);
       const payload = recapPayload(state);
       await interaction.reply({
-        content: openingText(),
-        embeds: [rulesEmbed(), ...(payload.embeds ?? [])],
-        components: payload.components,
+        components: [
+          text(openingText()),
+          rulesContainer(),
+          ...payload.components,
+        ],
+        flags: V2,
       });
       scheduleCivTick(interaction.client, guildId);
       return;
@@ -169,10 +176,9 @@ export async function execute(
 
     if (action === "begin") {
       const seats = await beginAge(state);
-      await interaction.reply({
-        content: beginText(seats),
-        ...recapPayload(state),
-      });
+      await interaction.reply(
+        recapPayload(state, "overview", undefined, beginText(seats)),
+      );
       scheduleCivTick(interaction.client, guildId);
       return;
     }
@@ -217,9 +223,6 @@ export async function execute(
       return;
     }
   } catch (e) {
-    await replyErr(
-      interaction,
-      e instanceof Error ? e.message : "Age failed.",
-    );
+    await replyErr(interaction, e instanceof Error ? e.message : "Age failed.");
   }
 }

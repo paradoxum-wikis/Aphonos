@@ -1,10 +1,9 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   MessageFlags,
-  ColorResolvable,
 } from "discord.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 interface mwResponse {
   query: {
@@ -77,9 +76,9 @@ export async function execute(
     const json = (await response.json()) as mwResponse;
     const pages = json.query.pages;
     const pageId = Object.keys(pages)[0];
-    const text = pages[pageId].revisions[0].slots.main["*"];
+    const pageText = pages[pageId].revisions[0].slots.main["*"];
     const options = Array.from(
-      text.matchAll(/<option>(.*?)<\/option>/gs),
+      pageText.matchAll(/<option>(.*?)<\/option>/gs),
       (m) => m[1].trim(),
     );
     if (options.length === 0) {
@@ -87,15 +86,14 @@ export async function execute(
     }
     const trivia = options[Math.floor(Math.random() * options.length)];
     const cleanedTrivia = cleanWikitext(trivia);
-    const embed = new EmbedBuilder()
-      .setColor(color as ColorResolvable)
-      .setTitle(title)
-      .setDescription(cleanedTrivia)
-      .setFooter({
-        text: footer,
-      })
-      .setTimestamp();
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container(color).addTextDisplayComponents(
+          text(`## ${title}\n${cleanedTrivia}\n\n-# ${footer}`),
+        ),
+      ],
+      flags: V2,
+    });
   } catch (error) {
     console.error("Error fetching trivia:", error);
     await interaction.reply({

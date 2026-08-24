@@ -1,7 +1,7 @@
 import {
   ChatInputCommandInteraction,
-  SlashCommandBuilder,
   EmbedBuilder,
+  SlashCommandBuilder,
 } from "discord.js";
 import {
   generateFighter,

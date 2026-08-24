@@ -1,9 +1,9 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   AttachmentBuilder,
 } from "discord.js";
+import { container, gallery, text, V2 } from "../utils/v2.js";
 
 const builder = new SlashCommandBuilder()
   .setName("anime")
@@ -135,49 +135,17 @@ export async function execute(
     const contentType =
       imageResponse.headers.get("content-type") || "image/webp";
     const extension = contentType.split("/")[1] || "webp";
+    const filename = `anime_${imageData.id}.${extension}`;
     const attachment = new AttachmentBuilder(imageBuffer, {
-      name: `anime_${imageData.id}.${extension}`,
+      name: filename,
     });
 
-    const embed = new EmbedBuilder()
-      .setColor("#ff90c8")
-      .setTitle("🎨 ARTWORK SUMMONED")
-      .setDescription("**An image has been retrieved from the archives!**")
-      .setImage(`attachment://anime_${imageData.id}.${extension}`)
-      .addFields({
-        name: "📊 Details",
-        value: `**ID:** ${imageData.id}`,
-        inline: true,
-      })
-      .setFooter({
-        text: "Sacred archives of Nekos.",
-      })
-      .setTimestamp();
-
-    if (RATING_MODE_ENABLED) {
-      embed.addFields({
-        name: "🔒 Rating",
-        value: imageData.rating,
-        inline: true,
-      });
-    }
-
-    if (imageData.artist_name) {
-      embed.addFields({
-        name: "👤 Artist",
-        value: imageData.artist_name,
-        inline: true,
-      });
-    }
-
-    if (imageData.source_url) {
-      embed.addFields({
-        name: "🔗 Source",
-        value: `[Original Artwork](${imageData.source_url})`,
-        inline: true,
-      });
-    }
-
+    const details = [`**ID:** ${imageData.id}`];
+    if (RATING_MODE_ENABLED) details.push(`**Rating:** ${imageData.rating}`);
+    if (imageData.artist_name)
+      details.push(`**Artist:** ${imageData.artist_name}`);
+    if (imageData.source_url)
+      details.push(`**Source:** [Original Artwork](${imageData.source_url})`);
     if (imageData.tags && imageData.tags.length > 0) {
       const displayTags = imageData.tags.slice(0, 20);
       const tagString = displayTags.map((tag) => `\`${tag}\``).join(", ");
@@ -185,17 +153,23 @@ export async function execute(
         imageData.tags.length > 20
           ? ` and ${imageData.tags.length - 20} more...`
           : "";
-
-      embed.addFields({
-        name: `🏷️ Tags (${imageData.tags.length})`,
-        value: tagString + moreTagsText,
-        inline: false,
-      });
+      details.push(
+        `**Tags (${imageData.tags.length}):** ${tagString}${moreTagsText}`,
+      );
     }
 
     await interaction.editReply({
-      embeds: [embed],
+      components: [
+        container("#ff90c8")
+          .addTextDisplayComponents(
+            text(
+              `## 🎨 ARTWORK SUMMONED\n**An image has been retrieved from the archives!**\n\n${details.join("\n")}\n\n-# Sacred archives of Nekos.`,
+            ),
+          )
+          .addMediaGalleryComponents(gallery(`attachment://${filename}`)),
+      ],
       files: [attachment],
+      flags: V2,
     });
   } catch (error) {
     console.error("Error fetching image:", error);

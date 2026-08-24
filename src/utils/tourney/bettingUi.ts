@@ -3,11 +3,11 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-  EmbedBuilder,
   MessageFlags,
   type ButtonInteraction,
   type Message,
 } from "discord.js";
+import { container, text, V2 } from "../v2.js";
 import {
   closeBetting,
   getNextPlayableSeries,
@@ -18,7 +18,7 @@ import {
 import { saveActiveTourney } from "./log.js";
 import { isTourneyOwner } from "./lifecycle.js";
 import type { SeriesState, TourneyState } from "./types.js";
-import { seriesEmbedColor, timeoutEmbed, type MessagePoster } from "./ui.js";
+import { seriesEmbedColor, timeoutPayload, type MessagePoster } from "./ui.js";
 
 const COLLECT_MS = 60 * 60 * 1000;
 
@@ -48,27 +48,22 @@ function tally(series: SeriesState): { a: number; b: number } {
   return { a, b };
 }
 
-export function bettingEmbed(
+export function bettingContainer(
   state: TourneyState,
   series: SeriesState,
   closed = false,
-): EmbedBuilder {
+) {
   const a = series.fighterAId!;
   const b = series.fighterBId!;
   const t = tally(series);
   const na = displayName(state, a);
   const nb = displayName(state, b);
 
-  const lines = [
-    `**${na}** vs **${nb}**`,
-    `**${na}** ${t.a} - **${nb}** ${t.b}`,
-    closed ? "Locked." : "Vote series winner.",
-  ];
-
-  return new EmbedBuilder()
-    .setColor(seriesEmbedColor(series))
-    .setTitle(`Pick'em - ${seriesTitle(series)}`)
-    .setDescription(lines.join("\n"));
+  return container(seriesEmbedColor(series)).addTextDisplayComponents(
+    text(
+      `## Pick'em - ${seriesTitle(series)}\n**${na}** vs **${nb}**\n**${na}** ${t.a} - **${nb}** ${t.b}\n${closed ? "Locked." : "Vote series winner."}`,
+    ),
+  );
 }
 
 function bettingRows(
@@ -129,8 +124,11 @@ export async function openBettingSession(
   }
 
   const message = await post({
-    embeds: [bettingEmbed(state, series)],
-    components: bettingRows(state, series),
+    components: [
+      bettingContainer(state, series),
+      ...bettingRows(state, series),
+    ],
+    flags: V2,
   });
 
   return collectBets(message, state, series.id);
@@ -168,8 +166,8 @@ async function collectBets(
         await saveActiveTourney(state);
         locked = true;
         await i.update({
-          embeds: [bettingEmbed(state, live, true)],
-          components: [],
+          components: [bettingContainer(state, live, true)],
+          flags: V2,
         });
         collector.stop("closed");
         return;
@@ -184,8 +182,11 @@ async function collectBets(
       await saveActiveTourney(state);
 
       await i.update({
-        embeds: [bettingEmbed(state, live)],
-        components: bettingRows(state, live),
+        components: [
+          bettingContainer(state, live),
+          ...bettingRows(state, live),
+        ],
+        flags: V2,
       });
     } catch (e) {
       if (i.replied || i.deferred) return;
@@ -202,12 +203,9 @@ async function collectBets(
         const live = state.series.find((s) => s.id === seriesId);
         if (live?.status === "betting") {
           await message.edit({
-            embeds: [
-              timeoutEmbed(
-                "Bets are still open. Run `/tourney` again to continue, then **Lock bets**.",
-              ),
-            ],
-            components: [],
+            ...timeoutPayload(
+              "Bets are still open. Run `/tourney` again to continue, then **Lock bets**.",
+            ),
           });
         }
       }

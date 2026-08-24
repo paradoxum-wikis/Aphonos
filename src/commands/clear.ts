@@ -2,13 +2,13 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   GuildMember,
-  EmbedBuilder,
   ChannelType,
   TextChannel,
   MessageFlags,
 } from "discord.js";
 import { ModerationLogger } from "../utils/moderationLogger.js";
 import { MessageLogger } from "../utils/messageLogger.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("clear")
@@ -102,33 +102,16 @@ export async function execute(
       messageCount: deleted.size,
     });
 
-    const embed = new EmbedBuilder()
-      .setColor("#4169E1")
-      .setTitle("🧹 SACRED PURIFICATION COMPLETE")
-      .setDescription(
-        `**${deleted.size} messages have been cleansed from the sacred halls!**`,
-      )
-      .addFields(
-        {
-          name: "PURIFIER OF TRUTH",
-          value: `${executor.user.tag}`,
-          inline: true,
-        },
-        { name: "ACTION ID", value: `${tempActionId}`, inline: true },
-        {
-          name: "MESSAGES ARCHIVED",
-          value: `${messagesArray.length} messages saved to the seraphic archives`,
-          inline: true,
-        },
-        {
-          name: "HOLY DECREE",
-          value: "The halls of Alteruism must remain pure",
-          inline: false,
-        },
-      )
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container("#4169E1").addTextDisplayComponents(
+          text(
+            `## 🧹 SACRED PURIFICATION COMPLETE\n**${deleted.size} messages have been cleansed from the sacred halls!**\n\n**PURIFIER OF TRUTH**\n${executor.user.tag}\n**ACTION ID**\n${tempActionId}\n**MESSAGES ARCHIVED**\n${messagesArray.length} messages saved to the seraphic archives\n**HOLY DECREE**\nThe halls of Alteruism must remain pure`,
+          ),
+        ),
+      ],
+      flags: V2,
+    });
   } catch (error) {
     console.error("Error during purge operation:", error);
     await interaction.reply({

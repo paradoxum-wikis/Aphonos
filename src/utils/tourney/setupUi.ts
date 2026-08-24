@@ -3,7 +3,6 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-  EmbedBuilder,
   Guild,
   MessageFlags,
   UserSelectMenuBuilder,
@@ -11,8 +10,10 @@ import {
   type ChatInputCommandInteraction,
   type Message,
   type MessageComponentInteraction,
+  type MessageCreateOptions,
   type UserSelectMenuInteraction,
 } from "discord.js";
+import { container, text, V2 } from "../v2.js";
 import {
   CONFERENCE,
   REFEREE_ARCANAS,
@@ -26,10 +27,11 @@ import { seedTourney, setRefPick } from "./bracket.js";
 import { saveActiveTourney } from "./log.js";
 import { isTourneyOwner } from "./lifecycle.js";
 import { sortRefsForPick } from "./refs.js";
-import { COLOR, isCollectorTimeout, timeoutEmbed } from "./ui.js";
+import { COLOR, isCollectorTimeout, timeoutPayload } from "./ui.js";
 import {
   arcanaAttachment,
-  arcanaCardEmbed,
+  arcanaCard,
+  arcanaCards,
   arcanaFullName,
   type ArcanaArtId,
 } from "./arcanaAssets.js";
@@ -56,15 +58,14 @@ function mentionList(ids: string[]): string {
   return ids.map((id) => `<@${id}>`).join(" ");
 }
 
-export function rosterPromptEmbed(step: "combatants" | "refs"): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(COLOR.neutral)
-    .setTitle(step === "combatants" ? "Combatants (16)" : "Referees (4)")
-    .setDescription(
+export function rosterPrompt(step: "combatants" | "refs") {
+  return container(COLOR.neutral).addTextDisplayComponents(
+    text(
       step === "combatants"
-        ? "Select 16 combatants."
-        : "Select 4 referees (not also combatants).",
-    );
+        ? "## Combatants (16)\nSelect 16 combatants."
+        : "## Referees (4)\nSelect 4 referees (not also combatants).",
+    ),
+  );
 }
 
 function combatantSelectRow() {
@@ -102,8 +103,8 @@ function pendingRefSlots(
   const open = state.referees
     .map((player, refIndex) => ({ player, refIndex }))
     .filter((x) => !done.has(x.refIndex));
-  return sortRefsForPick(open.map((x) => x.player)).map(
-    (player) => open.find((x) => x.player === player)!,
+  return sortRefsForPick(open.map((x) => x.player)).map((player) =>
+    open.find((x) => x.player === player)!,
   );
 }
 
@@ -112,12 +113,12 @@ function subgroupLabel(sg: SubgroupId): string {
   return `Subgroup ${sg} (${conf})`;
 }
 
-function refPickEmbed(
+function refPickContainer(
   state: TourneyState,
   current: { player: TourneyPlayer; refIndex: number },
   stage: "subgroup" | "arcana",
   heldSubgroup?: SubgroupId,
-): EmbedBuilder {
+) {
   const done = state.refPicks.length;
   const order = state.referees
     .map((r, refIndex) => {
@@ -136,10 +137,9 @@ function refPickEmbed(
       ? `**${done + 1}/4** <@${current.player.userId}> - pick a subgroup`
       : `**${done + 1}/4** <@${current.player.userId}> - **${subgroupLabel(heldSubgroup!)}** - pick an Arcana`;
 
-  return new EmbedBuilder()
-    .setColor(COLOR.neutral)
-    .setTitle("Referee picks")
-    .setDescription([order, "", step].join("\n"));
+  return container(COLOR.neutral).addTextDisplayComponents(
+    text(`## Referee picks\n${order}\n\n${step}`),
+  );
 }
 
 function subgroupRows(state: TourneyState): ActionRowBuilder<ButtonBuilder>[] {
@@ -191,18 +191,21 @@ function arcanaStagePayload(
   current: { player: TourneyPlayer; refIndex: number },
   sg: SubgroupId,
 ) {
-  const available = REFEREE_ARCANAS.filter((id) => !takenArcanas(state).has(id));
+  const available = REFEREE_ARCANAS.filter(
+    (id) => !takenArcanas(state).has(id),
+  ) as ArcanaArtId[];
   return {
-    embeds: [
-      refPickEmbed(state, current, "arcana", sg),
-      ...available.map((id) => arcanaCardEmbed(id as ArcanaArtId)),
+    flags: V2,
+    components: [
+      refPickContainer(state, current, "arcana", sg),
+      arcanaCards(available),
+      ...arcanaRows(state),
     ],
-    components: arcanaRows(state),
-    files: available.map((id) => arcanaAttachment(id as ArcanaArtId)),
+    files: available.map((id) => arcanaAttachment(id)),
   };
 }
 
-export function bracketEmbeds(state: TourneyState): EmbedBuilder[] {
+export function bracketContainers(state: TourneyState) {
   const name = (id: string) => {
     const p = state.combatants.find((c) => c.userId === id);
     return p ? p.displayName : id;
@@ -224,19 +227,17 @@ export function bracketEmbeds(state: TourneyState): EmbedBuilder[] {
       }
       lines.push("");
     }
-    return new EmbedBuilder()
-      .setColor(color)
-      .setTitle(title)
-      .setDescription(lines.join("\n").trim());
+    return container(color).addTextDisplayComponents(
+      text(`## ${title}\n${lines.join("\n").trim()}`),
+    );
   };
 
   return [
     block([1, 2], "Exo Conference - Round of 16", CONFERENCE.exo.color),
     block([3, 4], "Two X Conference - Round of 16", CONFERENCE.two_x.color),
-    new EmbedBuilder()
-      .setColor(COLOR.neutral)
-      .setTitle("Bracket locked")
-      .setDescription("Pick'em next."),
+    container(COLOR.neutral).addTextDisplayComponents(
+      text("## Bracket locked\nPick'em next."),
+    ),
   ];
 }
 
@@ -267,10 +268,9 @@ async function waitUserSelect(
   } catch (e) {
     if (isCollectorTimeout(e)) {
       await message.edit({
-        embeds: [
-          timeoutEmbed("Run `/tourney` again to continue where you left off."),
-        ],
-        components: [],
+        ...timeoutPayload(
+          "Run `/tourney` again to continue where you left off.",
+        ),
       });
       throw new Error("Setup timed out. Run `/tourney` to continue.");
     }
@@ -302,12 +302,9 @@ async function waitButton(
   } catch (e) {
     if (isCollectorTimeout(e)) {
       await message.edit({
-        embeds: [
-          timeoutEmbed(
-            "Run `/tourney` again to continue referee picks where you left off.",
-          ),
-        ],
-        components: [],
+        ...timeoutPayload(
+          "Run `/tourney` again to continue referee picks where you left off.",
+        ),
       });
       throw new Error("Setup timed out. Run `/tourney` to continue.");
     }
@@ -323,10 +320,9 @@ async function finishSeed(
   seedTourney(state);
   await saveActiveTourney(state);
   await btn.update({
-    content: "",
-    embeds: bracketEmbeds(state),
-    components: [],
+    components: bracketContainers(state),
     files: [],
+    flags: V2,
   });
 }
 
@@ -359,17 +355,14 @@ export async function runSetupFlow(
   }
 
   usedReply.v = true;
-  const firstReply = async (payload: {
-    embeds?: EmbedBuilder[];
-    components?: ActionRowBuilder<ButtonBuilder | UserSelectMenuBuilder>[];
-    content?: string;
-  }) => {
+  const firstReply = async (payload: MessageCreateOptions) => {
+    const body = { ...payload, flags: V2 };
     if (interaction.deferred && !interaction.replied) {
-      await interaction.editReply(payload);
+      await interaction.editReply(body);
     } else if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(payload);
+      await interaction.followUp(body);
     } else {
-      await interaction.reply(payload);
+      await interaction.reply(body);
     }
     return interaction.fetchReply();
   };
@@ -384,16 +377,17 @@ export async function runSetupFlow(
       return;
     }
     const message = await firstReply({
-      embeds: [refPickEmbed(state, current, "subgroup")],
-      components: subgroupRows(state),
+      components: [
+        refPickContainer(state, current, "subgroup"),
+        ...subgroupRows(state),
+      ],
     });
     await runRefPickLoop(message as Message, state);
     return;
   }
 
   const message = await firstReply({
-    embeds: [rosterPromptEmbed("combatants")],
-    components: [combatantSelectRow()],
+    components: [rosterPrompt("combatants"), combatantSelectRow()],
   });
 
   const combatantsIx = await waitUserSelect(
@@ -403,8 +397,8 @@ export async function runSetupFlow(
   );
   const combatantIds = [...combatantsIx.users.keys()];
   await combatantsIx.update({
-    embeds: [rosterPromptEmbed("refs")],
-    components: [refSelectRow()],
+    components: [rosterPrompt("refs"), refSelectRow()],
+    flags: V2,
   });
 
   const refsIx = await waitUserSelect(message, "tourney:sel:refs", ownerId);
@@ -413,9 +407,14 @@ export async function runSetupFlow(
   const overlap = combatantIds.filter((id) => refIds.includes(id));
   if (overlap.length) {
     await refsIx.update({
-      content: `These people are in both lists: ${mentionList(overlap)}. Use \`/tourney abort\` and start over.`,
-      embeds: [],
-      components: [],
+      components: [
+        container("#8B0000").addTextDisplayComponents(
+          text(
+            `These people are in both lists: ${mentionList(overlap)}. Use \`/tourney abort\` and start over.`,
+          ),
+        ),
+      ],
+      flags: V2,
     });
     return;
   }
@@ -427,9 +426,11 @@ export async function runSetupFlow(
 
   const first = pendingRefSlots(state)[0];
   await refsIx.update({
-    content: "",
-    embeds: [refPickEmbed(state, first, "subgroup")],
-    components: subgroupRows(state),
+    components: [
+      refPickContainer(state, first, "subgroup"),
+      ...subgroupRows(state),
+    ],
+    flags: V2,
   });
 
   await runRefPickLoop(message, state);
@@ -510,13 +511,13 @@ async function runRefPickLoop(
         if (state.refPicks.length < 4) {
           const next = pendingRefSlots(state)[0];
           await arcBtn.update({
-            content: "",
-            embeds: [
-              refPickEmbed(state, next, "subgroup"),
-              arcanaCardEmbed(arc as ArcanaArtId),
+            components: [
+              refPickContainer(state, next, "subgroup"),
+              arcanaCard(arc as ArcanaArtId),
+              ...subgroupRows(state),
             ],
-            components: subgroupRows(state),
             files: [arcanaAttachment(arc as ArcanaArtId)],
+            flags: V2,
           });
         } else {
           await finishSeed(message, state, arcBtn);

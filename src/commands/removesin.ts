@@ -2,10 +2,10 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   GuildMember,
-  EmbedBuilder,
   MessageFlags,
 } from "discord.js";
 import { ModerationLogger } from "../utils/moderationLogger.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("removesin")
@@ -113,34 +113,16 @@ export async function execute(
       return;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(undoSuccess ? "#00FF00" : "#FFA500")
-      .setTitle("✅ DIVINE ABSOLUTION GRANTED")
-      .setDescription(
-        `**Entry ${entryId} hath been pardoned with divine mercy!**`,
-      )
-      .addFields(
-        {
-          name: "ORIGINAL TRANSGRESSION",
-          value: `${entry.type.toUpperCase()} against ${targetUser}`,
-          inline: true,
-        },
-        {
-          name: "GRANTOR OF MERCY",
-          value: `${executor.user.tag}`,
-          inline: true,
-        },
-        { name: "PUNISHMENT STATUS", value: undoResult, inline: false },
-        {
-          name: "DIVINE DECREE",
-          value:
-            "The sin is pardoned and punishment lifted where possible. Go forth, as you may unleash your alter ego once again!",
-          inline: false,
-        },
-      )
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container(undoSuccess ? "#00FF00" : "#FFA500").addTextDisplayComponents(
+          text(
+            `## ✅ DIVINE ABSOLUTION GRANTED\n**Entry ${entryId} hath been pardoned with divine mercy!**\n\n**ORIGINAL TRANSGRESSION**\n${entry.type.toUpperCase()} against ${targetUser}\n**GRANTOR OF MERCY**\n${executor.user.tag}\n**PUNISHMENT STATUS**\n${undoResult}\n**DIVINE DECREE**\nThe sin is pardoned and punishment lifted where possible. Go forth, as you may unleash your alter ego once again!`,
+          ),
+        ),
+      ],
+      flags: V2,
+    });
 
     try {
       await targetUser.send(

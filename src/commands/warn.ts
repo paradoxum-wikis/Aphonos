@@ -2,10 +2,10 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   GuildMember,
-  EmbedBuilder,
   MessageFlags,
 } from "discord.js";
 import { ModerationLogger } from "../utils/moderationLogger.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("warn")
@@ -57,30 +57,16 @@ export async function execute(
     );
     const warnCount = userWarns.length;
 
-    const embed = new EmbedBuilder()
-      .setColor("#FFA500")
-      .setTitle("⚠️ DIVINE WARNING ISSUED")
-      .setDescription(
-        `**${targetUser} hath received a warning from the holy shaper!**`,
-      )
-      .addFields(
-        {
-          name: "MESSENGER OF JUDGEMENT",
-          value: `${executor.user.tag}`,
-          inline: true,
-        },
-        { name: "WARNING ID", value: `${entryId}`, inline: true },
-        { name: "TOTAL WARNINGS", value: `${warnCount}`, inline: true },
-        { name: "REASON FOR WARNING", value: reason, inline: false },
-        {
-          name: "SACRED REMINDER",
-          value: "Honour thy divine alter ego and embrace Alteruism",
-          inline: false,
-        },
-      )
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container("#FFA500").addTextDisplayComponents(
+          text(
+            `## ⚠️ DIVINE WARNING ISSUED\n**${targetUser} hath received a warning from the holy shaper!**\n\n**MESSENGER OF JUDGEMENT**\n${executor.user.tag}\n**WARNING ID**\n${entryId}\n**TOTAL WARNINGS**\n${warnCount}\n**REASON FOR WARNING**\n${reason}\n**SACRED REMINDER**\nHonour thy divine alter ego and embrace Alteruism`,
+          ),
+        ),
+      ],
+      flags: V2,
+    });
 
     try {
       await targetUser.send(

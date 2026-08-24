@@ -4,13 +4,14 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-  EmbedBuilder,
   MessageFlags,
   type ButtonInteraction,
   type Message,
 } from "discord.js";
-import { createHpBar, runBattle } from "../battleEngine.js";
+import { runBattle } from "../battleEngine.js";
+import { container, text, V2 } from "../v2.js";
 import {
+  battleCard,
   createBattleImage,
   getRealmName,
 } from "../../commands/battle.js";
@@ -21,11 +22,8 @@ import {
   resolveActiveReferees,
   tourneyArcanaLabel,
 } from "./arcana.js";
-import {
-  arcanaAttachment,
-  arcanaCardEmbed,
-} from "./arcanaAssets.js";
-import { awardsEmbed, computeAwards } from "./awards.js";
+import { arcanaAttachment, arcanaCards } from "./arcanaAssets.js";
+import { awardsContainer, computeAwards } from "./awards.js";
 import { saveActiveTourney } from "./log.js";
 import {
   endPlay,
@@ -38,7 +36,7 @@ import { ROUND_ARCANA } from "./types.js";
 import {
   isCollectorTimeout,
   seriesEmbedColor,
-  timeoutEmbed,
+  timeoutPayload,
   type MessagePoster,
 } from "./ui.js";
 
@@ -59,9 +57,7 @@ function seriesLabel(series: SeriesState): string {
   return bits.join(" - ");
 }
 
-export function getSeriesForPlay(
-  state: TourneyState,
-): SeriesState | undefined {
+export function getSeriesForPlay(state: TourneyState): SeriesState | undefined {
   const mid = state.series.find(
     (s) =>
       s.status === "in_progress" &&
@@ -84,11 +80,11 @@ function scoreLine(state: TourneyState, series: SeriesState): string {
   return `**${nameOf(state, a)} ${series.wins[a] ?? 0} - ${series.wins[b] ?? 0} ${nameOf(state, b)}** (to ${need})`;
 }
 
-function seriesEmbed(
+function seriesContainer(
   state: TourneyState,
   series: SeriesState,
   note?: string,
-): EmbedBuilder {
+) {
   const lines = [
     `**${nameOf(state, series.fighterAId!)}** vs **${nameOf(state, series.fighterBId!)}**`,
     scoreLine(state, series),
@@ -100,10 +96,9 @@ function seriesEmbed(
   }
   if (note) lines.push("", note);
 
-  return new EmbedBuilder()
-    .setColor(seriesEmbedColor(series))
-    .setTitle(seriesLabel(series))
-    .setDescription(lines.join("\n"));
+  return container(seriesEmbedColor(series)).addTextDisplayComponents(
+    text(`## ${seriesLabel(series)}\n${lines.join("\n")}`),
+  );
 }
 
 function startGameRow(seriesId: string, gameNum: number) {
@@ -129,23 +124,24 @@ export async function runPlaySession(
 
   try {
     const gameNum = series.games.length + 1;
-    const embeds = [
-      seriesEmbed(state, series, `Start game ${gameNum}.`),
-    ];
     const files: AttachmentBuilder[] = [];
+    let cards;
     if (gameNum === 1) {
-      const roundId = ROUND_ARCANA[series.round];
-      files.push(arcanaAttachment(roundId));
-      embeds.push(arcanaCardEmbed(roundId));
-      for (const r of resolveActiveReferees(state, series)) {
-        files.push(arcanaAttachment(r.arcana));
-        embeds.push(arcanaCardEmbed(r.arcana));
-      }
+      const ids = [
+        ROUND_ARCANA[series.round],
+        ...resolveActiveReferees(state, series).map((r) => r.arcana),
+      ];
+      for (const id of ids) files.push(arcanaAttachment(id));
+      cards = arcanaCards(ids, seriesEmbedColor(series));
     }
     const message = await post({
-      embeds,
+      components: [
+        seriesContainer(state, series, `Start game ${gameNum}.`),
+        ...(cards ? [cards] : []),
+        startGameRow(series.id, gameNum),
+      ],
       files,
-      components: [startGameRow(series.id, gameNum)],
+      flags: V2,
     });
 
     return await playLoop(message, state, series.id);
@@ -183,10 +179,7 @@ async function playLoop(
     } catch (e) {
       if (isCollectorTimeout(e)) {
         await message.edit({
-          embeds: [
-            timeoutEmbed("Run `/tourney` again when you want to continue."),
-          ],
-          components: [],
+          ...timeoutPayload("Run `/tourney` again when you want to continue."),
         });
       }
       return "timeout";
@@ -201,42 +194,39 @@ async function playLoop(
         await saveActiveTourney(state);
         await finishTourney(state);
         await message.edit({
-          embeds: [
-            seriesEmbed(
+          components: [
+            seriesContainer(
               state,
               updated,
               `**${nameOf(state, updated.winnerId!)}** wins the playoffs.`,
             ),
-            awardsEmbed(state),
+            awardsContainer(state),
           ],
-          components: [],
+          flags: V2,
         });
         return "tournament";
       }
 
       await message.edit({
-        embeds: [
-          seriesEmbed(
+        components: [
+          seriesContainer(
             state,
             updated,
             `**${nameOf(state, updated.winnerId!)}** advances.`,
           ),
         ],
-        components: [],
+        flags: V2,
       });
       return "series";
     }
 
     const nextGame = updated.games.length + 1;
     await message.edit({
-      embeds: [
-        seriesEmbed(
-          state,
-          updated,
-          `Start game ${nextGame}.`,
-        ),
+      components: [
+        seriesContainer(state, updated, `Start game ${nextGame}.`),
+        startGameRow(seriesId, nextGame),
       ],
-      components: [startGameRow(seriesId, nextGame)],
+      flags: V2,
     });
   }
   return "series";
@@ -289,24 +279,27 @@ async function runOneGame(
     fighter1.speed >= fighter2.speed ? fighter1.name : fighter2.name;
 
   const files: AttachmentBuilder[] = [battleFile];
-  const embeds: EmbedBuilder[] = [
-    new EmbedBuilder()
-      .setColor("#2E2B5F")
-      .setTitle(
-        `⚔️ THE ${realmName.toUpperCase()} HAVE DECLARED A DEATHBATTLE!`,
-      )
-      .setDescription(
-        `**${tag}**\n${tourneyArcanaLabel(state, series)}\n\n` +
-          `**${fighter1.name}** vs **${fighter2.name}**\n` +
-          `🏃 **${firstMover}** first\n\n` +
-          `🔴 **${fighter1.name}**: ${fighter1.maxHp} HP | ${fighter1.attack} ATK | ${fighter1.defense} DEF | ${fighter1.speed} SPD\n` +
-          `🔵 **${fighter2.name}**: ${fighter2.maxHp} HP | ${fighter2.attack} ATK | ${fighter2.defense} DEF | ${fighter2.speed} SPD`,
-      )
-      .setImage("attachment://deathbattle.png")
-      .setFooter({ text: tag }),
-  ];
+  const aUrl = memberA.user.displayAvatarURL({ size: 256, extension: "png" });
+  const bUrl = memberB.user.displayAvatarURL({ size: 256, extension: "png" });
 
-  await message.edit({ embeds, files, components: [] });
+  await message.edit({
+    components: [
+      battleCard({
+        color: "#2E2B5F",
+        title: `THE ${realmName.toUpperCase()} HAVE DECLARED A DEATHBATTLE!`,
+        intro: `**${tag}**\n${tourneyArcanaLabel(state, series)}\n**${fighter1.name}** vs **${fighter2.name}**\n🏃 **${firstMover}** first`,
+        f1: fighter1,
+        f2: fighter2,
+        f1Url: aUrl,
+        f2Url: bUrl,
+        image: "attachment://deathbattle.png",
+        log: "Battle begins in 3 seconds…",
+        footer: tag,
+      }),
+    ],
+    files,
+    flags: V2,
+  });
   await new Promise((r) => setTimeout(r, 3000));
 
   const result = await runBattle(fighter1, fighter2, {
@@ -316,22 +309,21 @@ async function runOneGame(
     hooks: createTourneyBattleHooks(state, series),
     onTurn: async ({ turn, fighter1: f1, fighter2: f2, battleLog }) => {
       await message.edit({
-        embeds: [
-          new EmbedBuilder()
-            .setColor("#35C2FF")
-            .setTitle("⚔️ BATTLE IN PROGRESS")
-            .setDescription(
-              `**${tag}** - Turn ${turn}\n\n` +
-                `🔴 **${f1.name}**: ${f1.hp}/${f1.maxHp}\n` +
-                `${createHpBar(f1.hp, f1.maxHp)}\n\n` +
-                `🔵 **${f2.name}**: ${f2.hp}/${f2.maxHp}\n` +
-                `${createHpBar(f2.hp, f2.maxHp)}\n\n` +
-                battleLog.slice(-5).join("\n"),
-            )
-            .setImage("attachment://deathbattle.png")
-            .setFooter({ text: tag }),
+        components: [
+          battleCard({
+            color: "#35C2FF",
+            title: "BATTLE IN PROGRESS",
+            intro: `**${tag}** — Turn ${turn}`,
+            f1,
+            f2,
+            f1Url: aUrl,
+            f2Url: bUrl,
+            image: "attachment://deathbattle.png",
+            log: battleLog.slice(-5).join("\n"),
+            footer: tag,
+          }),
         ],
-        components: [],
+        flags: V2,
       });
     },
   });
@@ -372,27 +364,28 @@ async function runOneGame(
   });
 
   await message.edit({
-    embeds: [
-      new EmbedBuilder()
-        .setColor("#FFD700")
-        .setTitle("🏆 DEATHBATTLE OVER")
-        .setDescription(
-          `**${tag}**\n\n` +
-            `**${result.winner.name}** wins (${result.turns} turns, ${result.winner.hp}/${result.winner.maxHp} HP)\n` +
-            `${scoreLine(state, after)}` +
-            (after.status === "complete"
-              ? `\n**${nameOf(state, after.winnerId!)}** advances.`
-              : "") +
-            `\n\n${result.battleLog.slice(-3).join("\n")}`,
-        )
-        .setImage("attachment://deathbattle-final.png")
-        .setFooter({ text: tag })
-        .setTimestamp(),
+    components: [
+      battleCard({
+        color: "#FFD700",
+        title: "DEATHBATTLE OVER",
+        intro:
+          `**${tag}**\n**${result.winner.name}** wins (${result.turns} turns, ${result.winner.hp}/${result.winner.maxHp} HP)\n${scoreLine(state, after)}` +
+          (after.status === "complete"
+            ? `\n**${nameOf(state, after.winnerId!)}** advances.`
+            : ""),
+        f1: fighter1,
+        f2: fighter2,
+        f1Url: aUrl,
+        f2Url: bUrl,
+        image: "attachment://deathbattle-final.png",
+        log: result.battleLog.slice(-3).join("\n"),
+        footer: tag,
+      }),
+      ...(after.status === "complete"
+        ? []
+        : [startGameRow(seriesId, after.games.length + 1)]),
     ],
     files: [finalFile],
-    components:
-      after.status === "complete"
-        ? []
-        : [startGameRow(seriesId, after.games.length + 1)],
+    flags: V2,
   });
 }

@@ -1,9 +1,9 @@
 import {
   ChatInputCommandInteraction,
-  EmbedBuilder,
   MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
+import { container, text, V2 } from "../utils/v2.js";
 import {
   abortTourney,
   isTourneyOwner,
@@ -61,12 +61,12 @@ export async function execute(
       return;
     }
     await interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x8b0000)
-          .setTitle("Aphonos Playoffs")
-          .setDescription("Tourney aborted."),
+      components: [
+        container("#8B0000").addTextDisplayComponents(
+          text("## Aphonos Playoffs\nTourney aborted."),
+        ),
       ],
+      flags: V2,
     });
     return;
   }

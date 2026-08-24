@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
@@ -9,6 +8,7 @@ import {
   ComponentType,
 } from "discord.js";
 import { ModerationLogger } from "../utils/moderationLogger.js";
+import { container, section, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("sins")
@@ -37,26 +37,23 @@ export async function execute(
 
   try {
     if (targetUser) {
-      // Show all moderation entries for specific user
       const userEntries = await ModerationLogger.getUserEntries(
         targetUser.id,
         interaction.guild.id,
       );
 
       if (userEntries.length === 0) {
-        const embed = new EmbedBuilder()
-          .setColor("#00FF00")
-          .setTitle("📋 RECORDS OF THE DAMNED")
-          .setDescription(
-            `**${targetUser.tag} hath a clean slate!**\n\nNo sins recorded in the records of the damned.`,
-          )
-          .setThumbnail(targetUser.displayAvatarURL())
-          .setFooter({
-            text: "A SOUL WHO HONOURS ALTERUISM. LET OTHERS LEARN.",
-          })
-          .setTimestamp();
-
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({
+          components: [
+            container("#00FF00").addSectionComponents(
+              section(
+                `## 📋 RECORDS OF THE DAMNED\n**${targetUser.tag} hath a clean slate!**\n\nNo sins recorded in the records of the damned.\n\n-# A SOUL WHO HONOURS ALTERUISM. LET OTHERS LEARN.`,
+                targetUser.displayAvatarURL(),
+              ),
+            ),
+          ],
+          flags: V2,
+        });
         return;
       }
 
@@ -73,7 +70,6 @@ export async function execute(
         counts.ban * 10 +
         counts.timeout * 3;
 
-      // Filter valid entries and reverse to show newest first
       const validEntries = userEntries
         .filter((entry) =>
           ["warn", "kick", "ban", "timeout"].includes(entry.type),
@@ -84,16 +80,7 @@ export async function execute(
       const totalPages = Math.ceil(validEntries.length / entriesPerPage);
       let currentPage = 0;
 
-      const createEmbed = (page: number) => {
-        const embed = new EmbedBuilder()
-          .setColor("#FFA500")
-          .setTitle("📋 RECORDS OF THE DAMNED")
-          .setDescription(
-            `**${targetUser.tag}'s sins**\n**Total entries:** ${userEntries.length}\n**Sin Score:** ${sinScore} ${sinScore === 1 ? "point" : "points"}\n\n**⚠️ Warnings:** ${counts.warn}\n**👢 Kicks:** ${counts.kick}\n**🔨 Bans:** ${counts.ban}\n**🤐 Timeouts:** ${counts.timeout}`,
-          )
-          .setThumbnail(targetUser.displayAvatarURL())
-          .setTimestamp();
-
+      const createPage = (page: number) => {
         const startIndex = page * entriesPerPage;
         const endIndex = Math.min(
           startIndex + entriesPerPage,
@@ -101,7 +88,7 @@ export async function execute(
         );
         const pageEntries = validEntries.slice(startIndex, endIndex);
 
-        for (const entry of pageEntries) {
+        const fields = pageEntries.map((entry) => {
           const date = new Date(entry.timestamp).toLocaleDateString();
           const time = new Date(entry.timestamp).toLocaleTimeString();
 
@@ -124,24 +111,27 @@ export async function execute(
             extraInfo = `\n**Duration:** ${entry.duration} minutes`;
           }
 
-          embed.addFields({
-            name: `${typeEmoji[entry.type]} ${typeName[entry.type]} ${entry.id}`,
-            value: `**Executor:** ${entry.moderatorTag}\n**Reason:** ${entry.reason}${extraInfo}\n**Date:** ${date} at ${time}`,
-            inline: false,
-          });
-        }
+          return `**${typeEmoji[entry.type]} ${typeName[entry.type]} ${entry.id}**\n**Executor:** ${entry.moderatorTag}\n**Reason:** ${entry.reason}${extraInfo}\n**Date:** ${date} at ${time}`;
+        });
 
-        if (totalPages > 1) {
-          embed.setFooter({
-            text: `Page ${page + 1} of ${totalPages} | DEFYERS WILL FACE JUDGMENT.`,
-          });
-        } else {
-          embed.setFooter({
-            text: "THE FAITHLESS SHALL BE CORRECTED.",
-          });
-        }
+        const footer =
+          totalPages > 1
+            ? `Page ${page + 1} of ${totalPages} | DEFYERS WILL FACE JUDGMENT.`
+            : "THE FAITHLESS SHALL BE CORRECTED.";
 
-        return embed;
+        const c = container("#FFA500").addSectionComponents(
+          section(
+            `## 📋 RECORDS OF THE DAMNED\n**${targetUser.tag}'s sins**\n**Total entries:** ${userEntries.length}\n**Sin Score:** ${sinScore} ${sinScore === 1 ? "point" : "points"}\n\n**⚠️ Warnings:** ${counts.warn}\n**👢 Kicks:** ${counts.kick}\n**🔨 Bans:** ${counts.ban}\n**🤐 Timeouts:** ${counts.timeout}`,
+            targetUser.displayAvatarURL(),
+          ),
+        );
+        for (const f of fields) {
+          c.addSeparatorComponents((s) => s).addTextDisplayComponents(text(f));
+        }
+        c.addSeparatorComponents((s) => s).addTextDisplayComponents(
+          text(`-# ${footer}`),
+        );
+        return c;
       };
 
       const createButtons = (page: number) => {
@@ -170,12 +160,11 @@ export async function execute(
         return row;
       };
 
-      const embed = createEmbed(currentPage);
       const components = totalPages > 1 ? [createButtons(currentPage)] : [];
 
       const response = await interaction.reply({
-        embeds: [embed],
-        components,
+        components: [createPage(currentPage), ...components],
+        flags: V2,
       });
 
       if (totalPages > 1) {
@@ -210,15 +199,16 @@ export async function execute(
           }
 
           await buttonInteraction.update({
-            embeds: [createEmbed(currentPage)],
-            components: [createButtons(currentPage)],
+            components: [createPage(currentPage), createButtons(currentPage)],
+            flags: V2,
           });
         });
 
         collector.on("end", async () => {
           try {
             await response.edit({
-              components: [],
+              components: [createPage(currentPage)],
+              flags: V2,
             });
           } catch (error) {
             // Interaction might have been deleted idfk LOL
@@ -226,24 +216,21 @@ export async function execute(
         });
       }
     } else {
-      // Show serverwide stats
       const allEntries = await ModerationLogger.getAllEntries(
         interaction.guild.id,
       );
 
       if (allEntries.length === 0) {
-        const embed = new EmbedBuilder()
-          .setColor("#00FF00")
-          .setTitle("📊 HOLY STATISTICS OF RIGHTEOUSNESS")
-          .setDescription(
-            "**The sacred halls remain pure!**\n\nNo transgressions have been recorded in this realm.",
-          )
-          .setFooter({
-            text: "ALL SOULS HONOUR THE DIVINE ALTER EGO. THE SACRED LAW OF ALTERUISM REIGNS SUPREME.",
-          })
-          .setTimestamp();
-
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({
+          components: [
+            container("#00FF00").addTextDisplayComponents(
+              text(
+                `## 📊 HOLY STATISTICS OF RIGHTEOUSNESS\n**The sacred halls remain pure!**\n\nNo transgressions have been recorded in this realm.\n\n-# ALL SOULS HONOUR THE DIVINE ALTER EGO. THE SACRED LAW OF ALTERUISM REIGNS SUPREME.`,
+              ),
+            ),
+          ],
+          flags: V2,
+        });
         return;
       }
 
@@ -307,16 +294,7 @@ export async function execute(
         .sort(([, a], [, b]) => b.score - a.score)
         .slice(0, 10);
 
-      const embed = new EmbedBuilder()
-        .setColor("#FF6B6B")
-        .setTitle("📊 HOLY STATISTICS OF TRANSGRESSIONS")
-        .setDescription(
-          `**Total actions recorded:** ${allEntries.length}\n\n**⚠️ Warnings:** ${typeCounts.warn}\n**👢 Kicks:** ${typeCounts.kick}\n**🔨 Bans:** ${typeCounts.ban}\n**🤐 Timeouts:** ${typeCounts.timeout}\n**🧹 Purges:** ${typeCounts.clear}`,
-        )
-        .setFooter({
-          text: "I AM THE HAND OF JUDGMENT. KNOW THAT RIGHTEOUS CORRECTION AWAITS ALL WHO DEFY ALTERUISM.",
-        })
-        .setTimestamp();
+      let body = `## 📊 HOLY STATISTICS OF TRANSGRESSIONS\n**Total actions recorded:** ${allEntries.length}\n\n**⚠️ Warnings:** ${typeCounts.warn}\n**👢 Kicks:** ${typeCounts.kick}\n**🔨 Bans:** ${typeCounts.ban}\n**🤐 Timeouts:** ${typeCounts.timeout}\n**🧹 Purges:** ${typeCounts.clear}`;
 
       if (sortedUsers.length > 0) {
         let leaderboard = "";
@@ -336,16 +314,15 @@ export async function execute(
           leaderboard += `${position} **${userData.tag}** - ${userData.score} ${userData.score === 1 ? "point" : "points"} (${breakdown.join(", ")})\n`;
         }
 
-        embed.addFields({
-          name: "EGO'S LIST OF SHAMEFUL BEINGS",
-          value:
-            leaderboard +
-            "*Warns = 1pt, Timeouts = 3pts, Kicks = 5pts, Bans = 10pts*",
-          inline: false,
-        });
+        body += `\n\n**EGO'S LIST OF SHAMEFUL BEINGS**\n${leaderboard}*Warns = 1pt, Timeouts = 3pts, Kicks = 5pts, Bans = 10pts*`;
       }
 
-      await interaction.reply({ embeds: [embed] });
+      body += `\n\n-# I AM THE HAND OF JUDGMENT. KNOW THAT RIGHTEOUS CORRECTION AWAITS ALL WHO DEFY ALTERUISM.`;
+
+      await interaction.reply({
+        components: [container("#FF6B6B").addTextDisplayComponents(text(body))],
+        flags: V2,
+      });
     }
   } catch (error) {
     console.error("Error fetching moderation records:", error);

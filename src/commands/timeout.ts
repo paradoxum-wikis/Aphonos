@@ -2,10 +2,10 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   GuildMember,
-  EmbedBuilder,
   MessageFlags,
 } from "discord.js";
 import { ModerationLogger } from "../utils/moderationLogger.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("timeout")
@@ -118,34 +118,16 @@ export async function execute(
     const durationDisplay =
       durationParts.join(", ") || `${totalMinutes} minutes`;
 
-    const embed = new EmbedBuilder()
-      .setColor("#FFD700")
-      .setTitle("🤐 DIVINE SILENCE IMPOSED")
-      .setDescription(
-        `**${targetUser} hath been silenced for transgressing against Alteruism!**`,
-      )
-      .addFields(
-        {
-          name: "ENFORCER OF SILENCE",
-          value: `${executor.user.tag}`,
-          inline: true,
-        },
-        { name: "ACTION ID", value: `${entryId}`, inline: true },
-        {
-          name: "DURATION OF REFLECTION",
-          value: `${durationDisplay} (${totalMinutes} minutes)`,
-          inline: true,
-        },
-        { name: "REASON FOR SILENCE", value: reason, inline: false },
-        {
-          name: "DIVINE WISDOM",
-          value: "In silence, the wayward may find the path to Alteruism",
-          inline: false,
-        },
-      )
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container("#FFD700").addTextDisplayComponents(
+          text(
+            `## 🤐 DIVINE SILENCE IMPOSED\n**${targetUser} hath been silenced for transgressing against Alteruism!**\n\n**ENFORCER OF SILENCE**\n${executor.user.tag}\n**ACTION ID**\n${entryId}\n**DURATION OF REFLECTION**\n${durationDisplay} (${totalMinutes} minutes)\n**REASON FOR SILENCE**\n${reason}\n**DIVINE WISDOM**\nIn silence, the wayward may find the path to Alteruism`,
+          ),
+        ),
+      ],
+      flags: V2,
+    });
   } catch (error) {
     await interaction.reply({
       content:

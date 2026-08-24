@@ -2,10 +2,10 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   GuildMember,
-  EmbedBuilder,
   MessageFlags,
 } from "discord.js";
 import { ModerationLogger } from "../utils/moderationLogger.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("kick")
@@ -69,29 +69,16 @@ export async function execute(
       guildId: interaction.guild.id,
     });
 
-    const embed = new EmbedBuilder()
-      .setColor("#FF6B6B")
-      .setTitle("⚖️ RIGHTEOUS CORRECTION DELIVERED")
-      .setDescription(
-        `**${targetUser} hath been cast out for defying the sacred law of Alteruism!**`,
-      )
-      .addFields(
-        {
-          name: "HAND OF JUDGEMENT",
-          value: `${executor.user.tag}`,
-          inline: true,
-        },
-        { name: "ACTION ID", value: `${entryId}`, inline: true },
-        { name: "REASON FOR CORRECTION", value: reason, inline: false },
-        {
-          name: "HOLY DECREE",
-          value: "The faithless shall not dwell among the righteous",
-          inline: false,
-        },
-      )
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container("#FF6B6B").addTextDisplayComponents(
+          text(
+            `## ⚖️ RIGHTEOUS CORRECTION DELIVERED\n**${targetUser} hath been cast out for defying the sacred law of Alteruism!**\n\n**HAND OF JUDGEMENT**\n${executor.user.tag}\n**ACTION ID**\n${entryId}\n**REASON FOR CORRECTION**\n${reason}\n**HOLY DECREE**\nThe faithless shall not dwell among the righteous`,
+          ),
+        ),
+      ],
+      flags: V2,
+    });
   } catch (error) {
     await interaction.reply({
       content:

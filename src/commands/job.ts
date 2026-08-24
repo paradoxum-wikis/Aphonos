@@ -4,7 +4,6 @@ import {
   ButtonInteraction,
   ButtonStyle,
   ChatInputCommandInteraction,
-  EmbedBuilder,
   GuildMember,
   LabelBuilder,
   MessageFlags,
@@ -38,6 +37,7 @@ import {
   sessionTitle,
   type WikiConfig,
 } from "../utils/agent/wikis.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const LLM_ENABLED = process.env.LLM_ENABLED === "true";
 
@@ -284,46 +284,19 @@ async function runAgentJob(opts: {
 
     const proposals = await listProposals(wiki, outputPage, { jobId });
 
-    const embed = new EmbedBuilder()
-      .setColor(0xb9afce)
-      .setTitle(isContinue ? "Job continued" : "Job complete")
-      .setDescription(result.summary.slice(0, 4000))
-      .addFields(
-        { name: "Wiki", value: wiki.sitename, inline: true },
-        { name: "Job", value: `\`${jobId}\``, inline: true },
-        { name: "Steps", value: String(result.steps), inline: true },
-        {
-          name: "Context",
-          value: formatContextUsage(
-            result.peakPromptTokens,
-            result.contextLimit,
-          ),
-          inline: true,
-        },
-        {
-          name: "Session",
-          value: `[${result.sessionPage}](${result.sessionUrl})`,
-        },
-        {
-          name: "Output",
-          value: `[${result.outputPage}](${result.outputUrl})`,
-        },
-      );
+    let fields = `**Wiki**\n${wiki.sitename}\n**Job**\n\`${jobId}\`\n**Steps**\n${result.steps}\n**Context**\n${formatContextUsage(
+      result.peakPromptTokens,
+      result.contextLimit,
+    )}\n**Session**\n[${result.sessionPage}](${result.sessionUrl})\n**Output**\n[${result.outputPage}](${result.outputUrl})`;
 
     if (proposals.length > 1) {
-      embed.addFields({
-        name: "Drafts",
-        value: proposals
-          .map((p) => `• ${p.target} (\`${p.id}\`)`)
-          .join("\n")
-          .slice(0, 1024),
-      });
+      fields += `\n**Drafts**\n${proposals
+        .map((p) => `• ${p.target} (\`${p.id}\`)`)
+        .join("\n")
+        .slice(0, 1024)}`;
     }
     if (proposals.length > 25) {
-      embed.addFields({
-        name: "Picker",
-        value: `Select shows 25 of ${proposals.length} pending. Approve/reject some, or continue and split work.`,
-      });
+      fields += `\n**Picker**\nSelect shows 25 of ${proposals.length} pending. Approve/reject some, or continue and split work.`;
     }
 
     const components: ActionRowBuilder<
@@ -343,12 +316,14 @@ async function runAgentJob(opts: {
                 : "Select a proposal",
             )
             .addOptions(
-              proposals.slice(0, 25).map((p) =>
-                new StringSelectMenuOptionBuilder()
-                  .setLabel(p.target.slice(0, 100))
-                  .setDescription(p.id.slice(0, 100))
-                  .setValue(p.id.slice(0, 100)),
-              ),
+              proposals
+                .slice(0, 25)
+                .map((p) =>
+                  new StringSelectMenuOptionBuilder()
+                    .setLabel(p.target.slice(0, 100))
+                    .setDescription(p.id.slice(0, 100))
+                    .setValue(p.id.slice(0, 100)),
+                ),
             ),
         ),
       );
@@ -364,9 +339,19 @@ async function runAgentJob(opts: {
     components.push(continueRow(userId, wiki.choice, jobId, thinking));
 
     await interaction.editReply({
-      content: `${interaction.user}`,
-      embeds: [embed],
-      components,
+      content: null,
+      components: [
+        container("#b9afce")
+          .addTextDisplayComponents(
+            text(
+              `## ${isContinue ? "Job continued" : "Job complete"}\n${interaction.user}\n\n${result.summary.slice(0, 3500)}`,
+            ),
+          )
+          .addSeparatorComponents((s) => s)
+          .addTextDisplayComponents(text(fields)),
+        ...components,
+      ],
+      flags: V2,
     });
   } catch (err) {
     console.error(`[job ${jobId}]`, err);
@@ -401,38 +386,27 @@ async function runSession(interaction: ChatInputCommandInteraction) {
     const proposals = await listProposals(wiki, outputPage, { all: true });
 
     await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0xb9afce)
-          .setTitle("Job pages")
-          .addFields(
-            { name: "Wiki", value: wiki.sitename },
-            {
-              name: "Session",
-              value: `${session.exists ? `[${sessionPage}](${sessionUrl})` : `\`${sessionPage}\``} - ${size(session)}`,
-            },
-            {
-              name: "Output",
-              value: `${output.exists ? `[${outputPage}](${outputUrl})` : `\`${outputPage}\``} - ${size(output)}`,
-            },
-            {
-              name: "Drafts",
-              value:
-                proposals.length > 0
-                  ? proposals
-                      .map((p) => {
-                        const reason =
-                          p.status === "rejected" && p.reason
-                            ? ` - ${p.reason}`
-                            : "";
-                        return `• [${p.target}](${pageUrl(wiki, p.draftTitle)}) \`${p.id}\` - job \`${p.jobId}\` - ${p.status}${reason}`;
-                      })
-                      .join("\n")
-                      .slice(0, 1024)
-                  : "-",
-            },
+      components: [
+        container("#b9afce").addTextDisplayComponents(
+          text(
+            `## Job pages\n**Wiki**\n${wiki.sitename}\n**Session**\n${session.exists ? `[${sessionPage}](${sessionUrl})` : `\`${sessionPage}\``} - ${size(session)}\n**Output**\n${output.exists ? `[${outputPage}](${outputUrl})` : `\`${outputPage}\``} - ${size(output)}\n**Drafts**\n${
+              proposals.length > 0
+                ? proposals
+                    .map((p) => {
+                      const reason =
+                        p.status === "rejected" && p.reason
+                          ? ` - ${p.reason}`
+                          : "";
+                      return `• [${p.target}](${pageUrl(wiki, p.draftTitle)}) \`${p.id}\` - job \`${p.jobId}\` - ${p.status}${reason}`;
+                    })
+                    .join("\n")
+                    .slice(0, 1024)
+                : "-"
+            }`,
           ),
+        ),
       ],
+      flags: V2,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -606,19 +580,21 @@ export async function handleJobDiffButton(interaction: ButtonInteraction) {
     if (body.length > 3500) body = `${body.slice(0, 3500)}\n...truncated`;
 
     await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0xb9afce)
-          .setTitle(`Diff ➡️ ${proposal.target}`)
-          .setDescription(`\`\`\`diff\n${body}\n\`\`\``.slice(0, 4096))
-          .addFields(
-            {
-              name: "Size",
-              value: `${cmp.fromSize} -> ${cmp.toSize} (${delta >= 0 ? "+" : ""}${delta} bytes)`,
-            },
-            { name: "Wiki", value: `[Compare on wiki](${mwDiff})` },
+      components: [
+        container("#b9afce")
+          .addTextDisplayComponents(
+            text(
+              `## Diff ➡️ ${proposal.target}\n${`\`\`\`diff\n${body}\n\`\`\``.slice(0, 3900)}`,
+            ),
+          )
+          .addSeparatorComponents((s) => s)
+          .addTextDisplayComponents(
+            text(
+              `**Size**\n${cmp.fromSize} -> ${cmp.toSize} (${delta >= 0 ? "+" : ""}${delta} bytes)\n**Wiki**\n[Compare on wiki](${mwDiff})`,
+            ),
           ),
       ],
+      flags: V2,
     });
   } catch (err) {
     console.error("[job diff]", err);
@@ -656,9 +632,7 @@ export async function handleJobApproveButton(interaction: ButtonInteraction) {
   if (await denyUnlessOwner(interaction, id.ownerId)) return;
 
   await interaction.showModal(
-    agreeModal(
-      `job:${id.kind}-modal:${id.ownerId}:${id.wikiChoice}:${id.key}`,
-    ),
+    agreeModal(`job:${id.kind}-modal:${id.ownerId}:${id.wikiChoice}:${id.key}`),
   );
 }
 

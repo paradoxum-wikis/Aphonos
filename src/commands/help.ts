@@ -1,13 +1,13 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
   MessageFlags,
 } from "discord.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("help")
@@ -196,52 +196,37 @@ const commands: CommandInfo[] = [
 const categories = [
   {
     name: "🥀 ALTERMINISTRATOR",
-    description: "**Divine powers reserved for the highest authority**",
     commands: commands.filter((cmd) => cmd.category === "admin"),
   },
   {
     name: "⚖️ MODERATOR",
-    description:
-      "**Sacred instruments for maintaining order and righteousness**",
     commands: commands.filter((cmd) => cmd.category === "moderator"),
   },
   {
     name: "📚 BASIC 1",
-    description: "**Available to all faithful souls in the sacred halls**",
     commands: commands.filter((cmd) => cmd.category === "basic1"),
   },
   {
     name: "📚 BASIC 2",
-    description: "**Available to all faithful souls in the sacred halls**",
     commands: commands.filter((cmd) => cmd.category === "basic2"),
   },
   {
     name: "📚 BASIC 3",
-    description: "**Available to all faithful souls in the sacred halls**",
     commands: commands.filter((cmd) => cmd.category === "basic3"),
   },
 ];
 
-function createEmbed(categoryIndex: number): EmbedBuilder {
+function createPage(categoryIndex: number) {
   const category = categories[categoryIndex];
+  const list = category.commands
+    .map((cmd) => `**${cmd.name}**\n${cmd.value}`)
+    .join("\n\n");
 
-  const embed = new EmbedBuilder()
-    .setColor("#00CED1")
-    .setTitle("📜 DIVINE INSTRUMENTS OF APHONOS")
-    .setDescription(
-      `**These be the sacred instruments!**\n\n*"I am the hand of judgement, and upon the faithless shall I deliver righteous correction."*\n\n${category.description}\n\n**Page ${categoryIndex + 1} of ${categories.length}**`,
-    )
-    .addFields({
-      name: category.name,
-      value: category.commands
-        .map((cmd) => `**${cmd.name}**\n${cmd.value}`)
-        .join("\n\n"),
-      inline: false,
-    })
-    .setFooter({ text: "Aphonos - Divine Enforcer of Alteruism." })
-    .setTimestamp();
-
-  return embed;
+  return container("#00CED1").addTextDisplayComponents(
+    text(
+      `## 📜 DIVINE INSTRUMENTS OF APHONOS\n### ${category.name}\n${list}\n-# Page ${categoryIndex + 1} of ${categories.length}`,
+    ),
+  );
 }
 
 function createButtons(
@@ -284,12 +269,13 @@ export async function execute(
   const totalPages = categories.length;
   let currentPage = 0;
 
-  const embed = createEmbed(currentPage);
-  const buttons = createButtons(currentPage, totalPages);
-
   const response = await interaction.reply({
-    embeds: [embed],
-    components: [buttons],
+    components: [
+      createPage(currentPage).addActionRowComponents(
+        createButtons(currentPage, totalPages),
+      ),
+    ],
+    flags: V2,
   });
 
   const collector = response.createMessageComponentCollector({
@@ -321,12 +307,13 @@ export async function execute(
         break;
     }
 
-    const newEmbed = createEmbed(currentPage);
-    const newButtons = createButtons(currentPage, totalPages);
-
     await buttonInteraction.update({
-      embeds: [newEmbed],
-      components: [newButtons],
+      components: [
+        createPage(currentPage).addActionRowComponents(
+          createButtons(currentPage, totalPages),
+        ),
+      ],
+      flags: V2,
     });
   });
 
@@ -354,6 +341,13 @@ export async function execute(
         .setDisabled(true),
     );
 
-    response.edit({ components: [disabledButtons] }).catch(() => {});
+    response
+      .edit({
+        components: [
+          createPage(currentPage).addActionRowComponents(disabledButtons),
+        ],
+        flags: V2,
+      })
+      .catch(() => {});
   });
 }

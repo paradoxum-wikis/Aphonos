@@ -2,11 +2,11 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   PermissionFlagsBits,
-  EmbedBuilder,
   ChannelType,
   MessageFlags,
 } from "discord.js";
 import { InterServerChat } from "../utils/interServerChat.js";
+import { container, text, V2_EPHEMERAL } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("interchat")
@@ -122,16 +122,16 @@ export async function execute(
 
     const poolId = InterServerChat.createPool(name);
 
-    const embed = new EmbedBuilder()
-      .setTitle("✅ Chat Pool Created")
-      .setDescription(
-        `Pool "**${name}**" has been created!\n\n` +
-          `**Pool ID:** \`${poolId}\`\n\n` +
-          `Use \`/interchat join pool:${name}\` in other channels to connect them to this pool.`,
-      )
-      .setColor("#00FF00");
-
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      components: [
+        container("#00FF00").addTextDisplayComponents(
+          text(
+            `## ✅ Chat Pool Created\nPool "**${name}**" has been created!\n\n**Pool ID:** \`${poolId}\`\n\nUse \`/interchat join pool:${name}\` in other channels to connect them to this pool.`,
+          ),
+        ),
+      ],
+      flags: V2_EPHEMERAL,
+    });
   } else if (subcommand === "join") {
     const poolIdentifier = interaction.options.getString("pool", true);
 
@@ -155,17 +155,15 @@ export async function execute(
     );
 
     if (success) {
-      const embed = new EmbedBuilder()
-        .setTitle("✅ Joined Chat Pool")
-        .setDescription(
-          `This channel has been added to pool "**${pool.name}**".\n\n` +
-            `Messages sent here will now be relayed to **${pool.channels.length} other channel(s)** in the pool.`,
-        )
-        .setColor("#00FF00");
-
       await interaction.reply({
-        embeds: [embed],
-        flags: MessageFlags.Ephemeral,
+        components: [
+          container("#00FF00").addTextDisplayComponents(
+            text(
+              `## ✅ Joined Chat Pool\nThis channel has been added to pool "**${pool.name}**".\n\nMessages sent here will now be relayed to **${pool.channels.length} other channel(s)** in the pool.`,
+            ),
+          ),
+        ],
+        flags: V2_EPHEMERAL,
       });
     } else {
       await interaction.reply({
@@ -213,22 +211,24 @@ export async function execute(
       return;
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle("📋 Chat Pools")
-      .setDescription(
-        pools
-          .map(
-            (pool) =>
-              `**${pool.name}**\n` +
-              `├ ID: \`${pool.id}\`\n` +
-              `├ Channels: ${pool.channels.length}\n` +
-              `└ Created: <t:${Math.floor(new Date(pool.createdAt).getTime() / 1000)}:R>`,
-          )
-          .join("\n\n"),
-      )
-      .setColor("#0099FF");
-
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      components: [
+        container("#0099FF").addTextDisplayComponents(
+          text(
+            `## 📋 Chat Pools\n${pools
+              .map(
+                (pool) =>
+                  `**${pool.name}**\n` +
+                  `├ ID: \`${pool.id}\`\n` +
+                  `├ Channels: ${pool.channels.length}\n` +
+                  `└ Created: <t:${Math.floor(new Date(pool.createdAt).getTime() / 1000)}:R>`,
+              )
+              .join("\n\n")}`,
+          ),
+        ),
+      ],
+      flags: V2_EPHEMERAL,
+    });
   } else if (subcommand === "info") {
     const poolIdentifier = interaction.options.getString("pool", true);
 
@@ -255,29 +255,16 @@ export async function execute(
       }),
     );
 
-    const embed = new EmbedBuilder()
-      .setTitle(`📊 Pool Info: ${pool.name}`)
-      .addFields(
-        { name: "Pool ID", value: `\`${pool.id}\``, inline: false },
-        {
-          name: "Channels",
-          value: pool.channels.length.toString(),
-          inline: true,
-        },
-        {
-          name: "Created",
-          value: `<t:${Math.floor(new Date(pool.createdAt).getTime() / 1000)}:R>`,
-          inline: true,
-        },
-        {
-          name: "Connected Channels",
-          value: channelList.join("\n") || "None",
-          inline: false,
-        },
-      )
-      .setColor("#0099FF");
-
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      components: [
+        container("#0099FF").addTextDisplayComponents(
+          text(
+            `## 📊 Pool Info: ${pool.name}\n**Pool ID**\n\`${pool.id}\`\n**Channels**\n${pool.channels.length}\n**Created**\n<t:${Math.floor(new Date(pool.createdAt).getTime() / 1000)}:R>\n**Connected Channels**\n${channelList.join("\n") || "None"}`,
+          ),
+        ),
+      ],
+      flags: V2_EPHEMERAL,
+    });
   } else if (subcommand === "rename") {
     const poolIdentifier = interaction.options.getString("pool", true);
     const newName = interaction.options.getString("newname", true);
@@ -373,19 +360,15 @@ export async function execute(
       }),
     );
 
-    const embed = new EmbedBuilder()
-      .setTitle("✅ Channel Status")
-      .setDescription(
-        `This channel is connected to pool "**${pool.name}**".\n\n` +
-          `Messages are being relayed to **${otherChannels.length}** other channel(s):`,
-      )
-      .addFields({
-        name: "Connected Channels",
-        value: channelList.join("\n") || "None (you're the only channel)",
-        inline: false,
-      })
-      .setColor("#00FF00");
-
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      components: [
+        container("#00FF00").addTextDisplayComponents(
+          text(
+            `## ✅ Channel Status\nThis channel is connected to pool "**${pool.name}**".\n\nMessages are being relayed to **${otherChannels.length}** other channel(s):\n\n**Connected Channels**\n${channelList.join("\n") || "None (you're the only channel)"}`,
+          ),
+        ),
+      ],
+      flags: V2_EPHEMERAL,
+    });
   }
 }

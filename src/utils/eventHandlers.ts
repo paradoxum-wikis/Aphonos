@@ -1,7 +1,6 @@
 import {
   GuildMember,
   TextChannel,
-  EmbedBuilder,
   ChannelType,
   Interaction,
   Collection,
@@ -16,6 +15,7 @@ import { ReactionRoleHandler } from "./reactionRoleHandler.js";
 import { hasReactionRoleMessage } from "./reactionRoleStore.js";
 import { RolePermissions } from "./rolePermissions.js";
 import { CommandAccessManager } from "./commandAccessManager.js";
+import { container, section, V2 } from "./v2.js";
 
 const WELCOME_CHANNEL_ID = "1366495690796040315";
 
@@ -179,19 +179,17 @@ export async function handleMemberJoin(member: GuildMember): Promise<void> {
   ) as TextChannel;
 
   if (welcomeChannel && welcomeChannel.type === ChannelType.GuildText) {
-    const embed = new EmbedBuilder()
-      .setColor("#00FF00")
-      .setTitle("🌟 A NEW SOUL ENTERS THE SACRED REALM")
-      .setDescription(
-        `**Welcome to the ALTER EGO Wiki Discord server, ${member.user.tag}!**\n\nThou hast entered the sacred halls of Alteruism!\nHere we honour our alter egos and embrace the righteous path!\n\nRead the sacred laws and contribute to our divine mission!\nKnow that defiance of Alteruism shall bring righteous correction!`,
-      )
-      .setThumbnail(member.user.displayAvatarURL())
-      .setFooter({
-        text: "BOUND BY DUTY TO HONOUR OUR DIVINE ALTER EGO, WE ARE ALTER EGOISTS.",
-      })
-      .setTimestamp();
-
-    await welcomeChannel.send({ embeds: [embed] });
+    await welcomeChannel.send({
+      components: [
+        container("#00FF00").addSectionComponents(
+          section(
+            `## 🌟 A NEW SOUL ENTERS THE SACRED REALM\n**Welcome to the ALTER EGO Wiki Discord server, ${member.user.tag}!**\n\nThou hast entered the sacred halls of Alteruism!\nHere we honour our alter egos and embrace the righteous path!\n\nRead the sacred laws and contribute to our divine mission!\nKnow that defiance of Alteruism shall bring righteous correction!\n\n-# BOUND BY DUTY TO HONOUR OUR DIVINE ALTER EGO, WE ARE ALTER EGOISTS.`,
+            member.user.displayAvatarURL(),
+          ),
+        ),
+      ],
+      flags: V2,
+    });
   }
 }
 

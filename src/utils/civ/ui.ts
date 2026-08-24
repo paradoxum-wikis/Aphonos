@@ -2,14 +2,13 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   MessageFlags,
   type ButtonInteraction,
-  type InteractionReplyOptions,
   type StringSelectMenuInteraction,
 } from "discord.js";
+import { container, gallery, text, V2, V2_EPHEMERAL } from "../v2.js";
 import { labelFaction } from "./awards.js";
 import { deadLine, playerRoll } from "./digest.js";
 import { power } from "./engine.js";
@@ -40,12 +39,11 @@ export function openingText(): string {
   ].join("\n");
 }
 
-export function rulesEmbed(): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(CIV_COLOR)
-    .setTitle("How to play")
-    .setDescription(
+export function rulesContainer() {
+  return container(CIV_COLOR).addTextDisplayComponents(
+    text(
       [
+        "## How to play",
         "**Speak in this channel**: every ~10s the Book turns and acts on what was said.",
         '**Found/join** a faction ("found Israel", "join Toru Dynasty"). Max 4 factions. Unaffiliated can only found/join.',
         '**Claim**: "settle city" or "march Israel" to take provinces. Farm feeds, temple prays, workshop forges, walls defend.',
@@ -53,7 +51,8 @@ export function rulesEmbed(): EmbedBuilder {
         '**Deal**: "trade/merge/nap with Y". "pray" for omens, "spy on Y" for intel.',
         "**Win**: be the last faction standing.",
       ].join("\n"),
-    );
+    ),
+  );
 }
 
 export function beginText(seats: string[]): string {
@@ -108,15 +107,6 @@ function overviewFields(
   });
 }
 
-export function mapEmbed(state: CivState): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(CIV_COLOR)
-    .setTitle("The Book")
-    .setDescription(header(state))
-    .setFooter({ text: "Map · * capital" })
-    .setImage("attachment://map.png");
-}
-
 function deadValue(state: CivState): string {
   const dead = Object.values(state.participants).filter((p) => p.dead);
   if (!dead.length) return "_nobody yet_";
@@ -160,63 +150,70 @@ function factionDetail(
   };
 }
 
-export function recapEmbed(
+function recapBody(
   state: CivState,
   view: BookView = "overview",
   facId?: string,
-): EmbedBuilder {
+): string {
   const lobby = state.phase === "factions";
-  const embed = new EmbedBuilder()
-    .setColor(CIV_COLOR)
-    .setTitle(lobby ? "Factions" : "The Book")
-    .setDescription(header(state))
-    .setFooter({
-      text:
-        view === "overview"
-          ? "Factions"
-          : view === "map"
-            ? "Map · * capital"
-            : view === "dead"
-              ? "Ghosts"
-              : "Last tick",
-    });
+  const title = lobby ? "Factions" : "The Book";
+  const foot =
+    view === "overview"
+      ? "Factions"
+      : view === "map"
+        ? "Map · * capital"
+        : view === "dead"
+          ? "Ghosts"
+          : "Last tick";
 
   const pick = facId ? state.factions[facId] : undefined;
   if (pick) {
     const d = factionDetail(state, pick);
-    embed.addFields({ name: d.name, value: d.value, inline: false });
-    return embed;
+    return `## ${title}\n${header(state)}\n\n**${d.name}**\n${d.value}\n\n-# ${foot}`;
   }
 
   if (view === "map") {
-    embed.setImage("attachment://map.png");
-    return embed;
+    return `## ${title}\n${header(state)}\n\n-# ${foot}`;
   }
   if (view === "dead") {
-    embed.addFields({ name: "Ghosts", value: deadValue(state), inline: false });
-    return embed;
+    return `## ${title}\n${header(state)}\n\n**Ghosts**\n${deadValue(state)}\n\n-# ${foot}`;
   }
   if (view === "facts") {
-    embed.addFields({ name: "Book", value: factsValue(state), inline: false });
-    return embed;
+    return `## ${title}\n${header(state)}\n\n**Book**\n${factsValue(state)}\n\n-# ${foot}`;
   }
 
-  embed.addFields(overviewFields(state));
+  const facs = overviewFields(state)
+    .map((f) => `**${f.name}**\n${f.value}`)
+    .join("\n\n");
   const unaff = Object.values(state.participants)
     .filter((p) => !p.factionId && !p.dead)
     .map((p) => p.displayName);
-  if (unaff.length) {
-    embed.addFields({
-      name: "Unaligned",
-      value: clip(unaff.join(", "), 1024),
-      inline: false,
-    });
-  }
   const dead = deadLine(state);
-  if (dead) {
-    embed.addFields({ name: "Ghosts", value: clip(dead, 1024), inline: false });
+  const extra = [
+    unaff.length ? `**Unaligned**\n${clip(unaff.join(", "), 1024)}` : "",
+    dead ? `**Ghosts**\n${clip(dead, 1024)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  return clip(
+    `## ${title}\n${header(state)}\n\n${facs}${extra ? `\n\n${extra}` : ""}\n\n-# ${foot}`,
+    2400,
+  );
+}
+
+export function recapContainer(
+  state: CivState,
+  view: BookView = "overview",
+  facId?: string,
+) {
+  const c = container(CIV_COLOR).addTextDisplayComponents(
+    text(recapBody(state, view, facId)),
+  );
+  if (view === "map" && !facId) {
+    c.addMediaGalleryComponents(gallery("attachment://map.png"));
   }
-  return embed;
+  return c;
 }
 
 export function recapComponents(
@@ -260,11 +257,14 @@ export function recapPayload(
   state: CivState,
   view: BookView = "overview",
   facId?: string,
-): Pick<InteractionReplyOptions, "embeds" | "components"> {
-  return {
-    embeds: [recapEmbed(state, view, facId)],
-    components: recapComponents(state, facId ? "overview" : view),
-  };
+  narration?: string,
+) {
+  const components = [
+    ...(narration ? [text(clip(narration, 1500))] : []),
+    recapContainer(state, view, facId),
+    ...recapComponents(state, facId ? "overview" : view),
+  ];
+  return { components, flags: V2 };
 }
 
 export async function handleCivBook(
@@ -299,9 +299,9 @@ export async function handleCivBook(
   if (view === "map") {
     const buf = await renderCivMap(state);
     await interaction.reply({
-      embeds: [recapEmbed(state, "map")],
+      components: [recapContainer(state, "map")],
       files: [{ attachment: buf, name: "map.png" }],
-      flags: MessageFlags.Ephemeral,
+      flags: V2_EPHEMERAL,
     });
     return;
   }
@@ -309,14 +309,13 @@ export async function handleCivBook(
   await interaction.update(recapPayload(state, view, facId));
 }
 
-export function abortEmbed(): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(CIV_ABORT_COLOR)
-    .setTitle("Age aborted")
-    .setDescription("Nobody won. The Book is shut.");
+export function abortContainer() {
+  return container(CIV_ABORT_COLOR).addTextDisplayComponents(
+    text("## Age aborted\nNobody won. The Book is shut."),
+  );
 }
 
-export function judgementEmbed(state: CivState): EmbedBuilder {
+export function judgementContainer(state: CivState) {
   const a = state.awards;
   const fields = [
     ["Winner", labelFaction(state, a?.chosen)],
@@ -332,22 +331,21 @@ export function judgementEmbed(state: CivState): EmbedBuilder {
     ["First to fall", labelFaction(state, a?.fallen)],
   ];
   const people = playerRoll(state).join("\n");
-  return new EmbedBuilder()
-    .setColor(CIV_COLOR)
-    .setTitle("The Age is over")
-    .setDescription(
-      a?.chosen
-        ? `**${labelFaction(state, a.chosen)}** won.`
-        : "Nobody won.",
-    )
-    .addFields([
-      ...fields.map(([name, value]) => ({
-        name,
-        value: String(value),
-        inline: true,
-      })),
-      ...(people
-        ? [{ name: "People", value: people.slice(0, 1024), inline: false }]
-        : []),
-    ]);
+  return container(CIV_COLOR).addTextDisplayComponents(
+    text(
+      clip(
+        [
+          "## The Age is over",
+          a?.chosen
+            ? `**${labelFaction(state, a.chosen)}** won.`
+            : "Nobody won.",
+          fields.map(([name, value]) => `**${name}:** ${value}`).join("\n"),
+          people ? `**People**\n${people}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        4000,
+      ),
+    ),
+  );
 }

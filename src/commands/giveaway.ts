@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   ButtonBuilder,
   ButtonStyle,
   ActionRowBuilder,
@@ -9,6 +8,7 @@ import {
   GuildMember,
   MessageFlags,
 } from "discord.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("giveaway")
@@ -76,6 +76,7 @@ export async function execute(
   const winnerCount = interaction.options.getInteger("winners") || 1;
   const durationMs = totalMinutes * 60 * 1000;
   const endTime = new Date(Date.now() + durationMs);
+  const endStamp = `<t:${Math.floor(endTime.getTime() / 1000)}:R>`;
 
   const joinButton = new ButtonBuilder()
     .setCustomId("giveaway_join")
@@ -85,26 +86,17 @@ export async function execute(
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(joinButton);
 
-  const embed = new EmbedBuilder()
-    .setColor("#FFD700")
-    .setTitle("🎉 GIVEAWAY INITIATED")
-    .setDescription(
-      `**Aphonos has authorized a distribution of wealth!**\n\n**🎁 PRIZE:** ${prize}\n**👑 HOST:** ${executor}\n**🏆 WINNERS:** ${winnerCount}\n**⏰ ENDS:** <t:${Math.floor(endTime.getTime() / 1000)}:R>`,
-    )
-    .addFields({
-      name: "INSTRUCTIONS",
-      value:
-        "Press the button below to enter the sacred lottery! (Press again to withdraw)",
-      inline: false,
-    })
-    .setFooter({
-      text: "May Aphonos guide fortune to the worthy.",
-    })
-    .setTimestamp();
-
   const message = await interaction.reply({
-    embeds: [embed],
-    components: [row],
+    components: [
+      container("#FFD700")
+        .addTextDisplayComponents(
+          text(
+            `## 🎉 GIVEAWAY INITIATED\n**Aphonos has authorized a distribution of wealth!**\n\n**🎁 PRIZE:** ${prize}\n**👑 HOST:** ${executor}\n**🏆 WINNERS:** ${winnerCount}\n**⏰ ENDS:** ${endStamp}\n\n**INSTRUCTIONS**\nPress the button below to enter the sacred lottery! (Press again to withdraw)\n\n-# May Aphonos guide fortune to the worthy.`,
+          ),
+        )
+        .addActionRowComponents(row),
+    ],
+    flags: V2,
     fetchReply: true,
   });
 
@@ -146,19 +138,20 @@ export async function execute(
 
     const participantArray = Array.from(participants);
     const winners: string[] = [];
-    const baseEndedEmbed = new EmbedBuilder()
-      .setColor(participantArray.length > 0 ? "#00FF00" : "#FF0000")
-      .setTitle("🎉 GIVEAWAY CONCLUDED")
-      .setTimestamp();
+    const header = `**Aphonos has authorized a distribution of wealth!**\n\n**🎁 PRIZE:** ${prize}\n**👑 HOST:** ${executor}\n**🏆 WINNERS:** ${winnerCount}\n**⏰ ENDED:** ${endStamp}`;
 
     if (participantArray.length === 0) {
-      baseEndedEmbed.setDescription(
-        `**Aphonos has authorized a distribution of wealth!**\n\n**🎁 PRIZE:** ${prize}\n**👑 HOST:** ${executor}\n**🏆 WINNERS:** ${winnerCount}\n**⏰ ENDED:** <t:${Math.floor(endTime.getTime() / 1000)}:R>\n\n**😔 RESULT:** No souls sought favor.`,
-      );
-
       await message.edit({
-        embeds: [baseEndedEmbed],
-        components: [disabledRow],
+        components: [
+          container("#FF0000")
+            .addTextDisplayComponents(
+              text(
+                `## 🎉 GIVEAWAY CONCLUDED\n${header}\n\n**😔 RESULT:** No souls sought favor.`,
+              ),
+            )
+            .addActionRowComponents(disabledRow),
+        ],
+        flags: V2,
       });
 
       await message.reply({
@@ -173,13 +166,17 @@ export async function execute(
 
       const winnerMentions = winners.map((id) => `<@${id}>`).join(", ");
 
-      baseEndedEmbed.setDescription(
-        `**Aphonos has authorized a distribution of wealth!**\n\n**🎁 PRIZE:** ${prize}\n**👑 HOST:** ${executor}\n**🏆 WINNERS:** ${winnerCount}\n**⏰ ENDED:** <t:${Math.floor(endTime.getTime() / 1000)}:R>\n\n**🎉 WINNERS:** ${winnerMentions}`,
-      );
-
       await message.edit({
-        embeds: [baseEndedEmbed],
-        components: [disabledRow],
+        components: [
+          container("#00FF00")
+            .addTextDisplayComponents(
+              text(
+                `## 🎉 GIVEAWAY CONCLUDED\n${header}\n\n**🎉 WINNERS:** ${winnerMentions}`,
+              ),
+            )
+            .addActionRowComponents(disabledRow),
+        ],
+        flags: V2,
       });
 
       await message.reply({

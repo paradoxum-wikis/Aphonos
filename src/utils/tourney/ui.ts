@@ -1,14 +1,9 @@
-import {
-  EmbedBuilder,
-  type Message,
-  type MessageCreateOptions,
-} from "discord.js";
+import type { Message, MessageCreateOptions } from "discord.js";
+import { container, text, V2 } from "../v2.js";
 import type { SeriesState } from "./types.js";
 import { CONFERENCE } from "./types.js";
 
-export type MessagePoster = (
-  payload: MessageCreateOptions,
-) => Promise<Message>;
+export type MessagePoster = (payload: MessageCreateOptions) => Promise<Message>;
 
 export const COLOR = {
   exo: CONFERENCE.exo.color,
@@ -19,7 +14,10 @@ export const COLOR = {
 
 export function seriesEmbedColor(series: SeriesState): number {
   if (series.round === "final") return COLOR.finals;
-  if (series.conference === "two_x" || (series.subgroup && series.subgroup >= 3))
+  if (
+    series.conference === "two_x" ||
+    (series.subgroup && series.subgroup >= 3)
+  )
     return COLOR.twoX;
   return COLOR.exo;
 }
@@ -32,9 +30,13 @@ export function isCollectorTimeout(err: unknown): boolean {
   );
 }
 
-export function timeoutEmbed(resumeHint: string): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(COLOR.neutral)
-    .setTitle("Aphonos Playoffs")
-    .setDescription(`This step timed out.\n${resumeHint}`);
+export function timeoutPayload(resumeHint: string) {
+  return {
+    flags: V2,
+    components: [
+      container(COLOR.neutral).addTextDisplayComponents(
+        text(`## Aphonos Playoffs\nThis step timed out.\n${resumeHint}`),
+      ),
+    ],
+  };
 }

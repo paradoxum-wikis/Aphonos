@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   AttachmentBuilder,
   GuildMember,
   User,
@@ -9,6 +8,7 @@ import {
 } from "discord.js";
 import { createCanvas, loadImage, Image } from "@napi-rs/canvas";
 import path from "path";
+import { container, gallery, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("ship")
@@ -311,21 +311,18 @@ export async function execute(
     );
     const attachment = new AttachmentBuilder(imageBuffer, { name: "ship.png" });
 
-    const embed = new EmbedBuilder()
-      .setColor(percentage >= 60 ? "#ff00cd" : "#bf40a2")
-      .setTitle("💕 HERE COMES THE SHIP")
-      .setDescription(
-        `**${user1Name} × ${user2Name}**\n` +
-          `**Ship Name:** ${shipName}\n` +
-          `${percentage}% ${progressBar} ${rating}`,
-      )
-      .setImage("attachment://ship.png")
-      .setFooter({ text: flavorText })
-      .setTimestamp();
-
     await interaction.editReply({
-      embeds: [embed],
+      components: [
+        container(percentage >= 60 ? "#ff00cd" : "#bf40a2")
+          .addTextDisplayComponents(
+            text(
+              `## 💕 HERE COMES THE SHIP\n**${user1Name} × ${user2Name}**\n**Ship Name:** ${shipName}\n${percentage}% ${progressBar} ${rating}\n\n-# ${flavorText}`,
+            ),
+          )
+          .addMediaGalleryComponents(gallery("attachment://ship.png")),
+      ],
       files: [attachment],
+      flags: V2,
     });
   } catch (error) {
     console.error("Ship error:", error);

@@ -3,7 +3,6 @@ import {
   ChatInputCommandInteraction,
   MessageFlags,
   PermissionFlagsBits,
-  EmbedBuilder,
 } from "discord.js";
 import {
   addReactionRoleRule,
@@ -12,21 +11,16 @@ import {
   removeReactionRoleRule,
   type ReactionRoleRule,
 } from "../utils/reactionRoleStore.js";
+import { container, text, V2, V2_EPHEMERAL } from "../utils/v2.js";
 
 function isSnowflake(s: string): boolean {
   return /^\d{15,25}$/.test(s);
 }
 
-function makeEmbed(params: {
-  title: string;
-  description: string;
-  color: string;
-}): EmbedBuilder {
-  return new EmbedBuilder()
-    .setTitle(params.title)
-    .setDescription(params.description)
-    .setColor(params.color as import("discord.js").ColorResolvable)
-    .setTimestamp();
+function box(title: string, description: string, color: string) {
+  return container(color).addTextDisplayComponents(
+    text(`## ${title}\n${description}`),
+  );
 }
 
 export const data = new SlashCommandBuilder()
@@ -114,15 +108,15 @@ export async function execute(
   const guildId = interaction.guildId;
 
   if (!guildId) {
-    const embed = makeEmbed({
-      title: "⚠️ REACTION ROLE",
-      description: "This command can only be used in a server.",
-      color: "#FFA500",
-    });
-
     await interaction.reply({
-      embeds: [embed],
-      flags: MessageFlags.Ephemeral,
+      components: [
+        box(
+          "⚠️ REACTION ROLE",
+          "This command can only be used in a server.",
+          "#FFA500",
+        ),
+      ],
+      flags: V2_EPHEMERAL,
     });
     return;
   }
@@ -131,15 +125,15 @@ export async function execute(
     const rules = getReactionRoleRules({ guildId });
 
     if (rules.length === 0) {
-      const embed = makeEmbed({
-        title: "📋 REACTION ROLE LIST",
-        description: "No reaction role rules are configured for this server.",
-        color: "#FFA500",
-      });
-
       await interaction.reply({
-        embeds: [embed],
-        flags: MessageFlags.Ephemeral,
+        components: [
+          box(
+            "📋 REACTION ROLE LIST",
+            "No reaction role rules are configured for this server.",
+            "#FFA500",
+          ),
+        ],
+        flags: V2_EPHEMERAL,
       });
       return;
     }
@@ -156,15 +150,9 @@ export async function execute(
       ].join(" ");
     });
 
-    const embed = makeEmbed({
-      title: "📋 REACTION ROLE LIST",
-      description: lines.join("\n"),
-      color: "#00FF00",
-    });
-
     await interaction.reply({
-      embeds: [embed],
-      flags: MessageFlags.Ephemeral,
+      components: [box("📋 REACTION ROLE LIST", lines.join("\n"), "#00FF00")],
+      flags: V2_EPHEMERAL,
     });
     return;
   }
@@ -185,53 +173,54 @@ export async function execute(
       interaction.options.getBoolean("remove_on_unreact", false) ?? true;
 
     if (!isSnowflake(messageId)) {
-      const embed = makeEmbed({
-        title: "❌ REACTION ROLE ADD",
-        description:
-          "Invalid `message_id` (expected a numeric Discord snowflake).",
-        color: "#FF0000",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "❌ REACTION ROLE ADD",
+            "Invalid `message_id` (expected a numeric Discord snowflake).",
+            "#FF0000",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
     if (!isSnowflake(roleId)) {
-      const embed = makeEmbed({
-        title: "❌ REACTION ROLE ADD",
-        description:
-          "Invalid `role_id` (expected a numeric Discord snowflake).",
-        color: "#FF0000",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "❌ REACTION ROLE ADD",
+            "Invalid `role_id` (expected a numeric Discord snowflake).",
+            "#FF0000",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
     if (!isSnowflake(channelId)) {
-      const embed = makeEmbed({
-        title: "❌ REACTION ROLE ADD",
-        description:
-          "Invalid `channel_id` (expected a numeric Discord snowflake).",
-        color: "#FF0000",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "❌ REACTION ROLE ADD",
+            "Invalid `channel_id` (expected a numeric Discord snowflake).",
+            "#FF0000",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
     if (!emoji || emoji.trim().length === 0) {
-      const embed = makeEmbed({
-        title: "❌ REACTION ROLE ADD",
-        description: "Invalid `emoji` (must not be empty).",
-        color: "#FF0000",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "❌ REACTION ROLE ADD",
+            "Invalid `emoji` (must not be empty).",
+            "#FF0000",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
@@ -240,29 +229,29 @@ export async function execute(
     try {
       const channel = await interaction.guild?.channels.fetch(channelId);
       if (!channel || !("messages" in channel)) {
-        const embed = makeEmbed({
-          title: "❌ REACTION ROLE ADD",
-          description:
-            "That channel either doesn't exist, isn't accessible, or doesn't support messages.",
-          color: "#FF0000",
-        });
-
         await interaction.editReply({
-          embeds: [embed],
+          components: [
+            box(
+              "❌ REACTION ROLE ADD",
+              "That channel either doesn't exist, isn't accessible, or doesn't support messages.",
+              "#FF0000",
+            ),
+          ],
+          flags: V2,
         });
         return;
       }
       await channel.messages.fetch(messageId);
     } catch {
-      const embed = makeEmbed({
-        title: "❌ REACTION ROLE ADD",
-        description:
-          "I couldn't fetch that message. Check the message ID + channel ID, and ensure I have View Channel + Read Message History.",
-        color: "#FF0000",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "❌ REACTION ROLE ADD",
+            "I couldn't fetch that message. Check the message ID + channel ID, and ensure I have View Channel + Read Message History.",
+            "#FF0000",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
@@ -278,36 +267,37 @@ export async function execute(
 
     const added = addReactionRoleRule(newRule);
     if (!added) {
-      const embed = makeEmbed({
-        title: "⚠️ REACTION ROLE ADD",
-        description:
-          "A rule already exists for that guild/channel/message/emoji combo.",
-        color: "#FFA500",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "⚠️ REACTION ROLE ADD",
+            "A rule already exists for that guild/channel/message/emoji combo.",
+            "#FFA500",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
 
-    const embed = makeEmbed({
-      title: "✅ REACTION ROLE ADD",
-      description: [
-        "**Saved reaction role rule.**",
-        "",
-        `guild=\`${guildId}\``,
-        `channel=\`${channelId}\``,
-        `message=\`${messageId}\``,
-        `emoji=\`${emoji}\``,
-        `role=\`${roleId}\``,
-        `removeOnUnreact=\`${removeOnUnreact}\``,
-      ].join("\n"),
-      color: "#00FF00",
-    });
-
     await interaction.editReply({
-      embeds: [embed],
+      components: [
+        box(
+          "✅ REACTION ROLE ADD",
+          [
+            "**Saved reaction role rule.**",
+            "",
+            `guild=\`${guildId}\``,
+            `channel=\`${channelId}\``,
+            `message=\`${messageId}\``,
+            `emoji=\`${emoji}\``,
+            `role=\`${roleId}\``,
+            `removeOnUnreact=\`${removeOnUnreact}\``,
+          ].join("\n"),
+          "#00FF00",
+        ),
+      ],
+      flags: V2,
     });
     return;
   }
@@ -323,40 +313,41 @@ export async function execute(
       interaction.channelId;
 
     if (!isSnowflake(messageId)) {
-      const embed = makeEmbed({
-        title: "❌ REACTION ROLE REMOVE",
-        description:
-          "Invalid `message_id` (expected a numeric Discord snowflake).",
-        color: "#FF0000",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "❌ REACTION ROLE REMOVE",
+            "Invalid `message_id` (expected a numeric Discord snowflake).",
+            "#FF0000",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
     if (!isSnowflake(channelId)) {
-      const embed = makeEmbed({
-        title: "❌ REACTION ROLE REMOVE",
-        description:
-          "Invalid `channel_id` (expected a numeric Discord snowflake).",
-        color: "#FF0000",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "❌ REACTION ROLE REMOVE",
+            "Invalid `channel_id` (expected a numeric Discord snowflake).",
+            "#FF0000",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
     if (!emoji || emoji.trim().length === 0) {
-      const embed = makeEmbed({
-        title: "❌ REACTION ROLE REMOVE",
-        description: "Invalid `emoji` (must not be empty).",
-        color: "#FF0000",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "❌ REACTION ROLE REMOVE",
+            "Invalid `emoji` (must not be empty).",
+            "#FF0000",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
@@ -369,45 +360,41 @@ export async function execute(
     });
 
     if (!removed) {
-      const embed = makeEmbed({
-        title: "⚠️ REACTION ROLE REMOVE",
-        description: "No matching rule found to remove.",
-        color: "#FFA500",
-      });
-
       await interaction.editReply({
-        embeds: [embed],
+        components: [
+          box(
+            "⚠️ REACTION ROLE REMOVE",
+            "No matching rule found to remove.",
+            "#FFA500",
+          ),
+        ],
+        flags: V2,
       });
       return;
     }
 
-    const embed = makeEmbed({
-      title: "✅ REACTION ROLE REMOVE",
-      description: [
-        "**Removed reaction role rule.**",
-        "",
-        `guild=\`${guildId}\``,
-        `channel=\`${channelId}\``,
-        `message=\`${messageId}\``,
-        `emoji=\`${emoji}\``,
-      ].join("\n"),
-      color: "#00FF00",
-    });
-
     await interaction.editReply({
-      embeds: [embed],
+      components: [
+        box(
+          "✅ REACTION ROLE REMOVE",
+          [
+            "**Removed reaction role rule.**",
+            "",
+            `guild=\`${guildId}\``,
+            `channel=\`${channelId}\``,
+            `message=\`${messageId}\``,
+            `emoji=\`${emoji}\``,
+          ].join("\n"),
+          "#00FF00",
+        ),
+      ],
+      flags: V2,
     });
     return;
   }
 
-  const embed = makeEmbed({
-    title: "❌ REACTION ROLE",
-    description: "Unknown subcommand.",
-    color: "#FF0000",
-  });
-
   await interaction.reply({
-    embeds: [embed],
-    flags: MessageFlags.Ephemeral,
+    components: [box("❌ REACTION ROLE", "Unknown subcommand.", "#FF0000")],
+    flags: V2_EPHEMERAL,
   });
 }

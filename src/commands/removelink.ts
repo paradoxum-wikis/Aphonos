@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   GuildMember,
   ActionRowBuilder,
   ButtonBuilder,
@@ -17,6 +16,7 @@ import {
   EDIT_COUNT_ROLE_IDS,
   TOP_CONTRIBUTORS_ROLE_ID,
 } from "../utils/roleConstants.js";
+import { container, text, V2, V2_EPHEMERAL } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("removelink")
@@ -57,29 +57,6 @@ export async function execute(
       return;
     }
 
-    const confirmationEmbed = new EmbedBuilder()
-      .setColor("#FF0000")
-      .setTitle("⚠️ LINKING SEVERANCE")
-      .setDescription(
-        `**THOU ART ABOUT TO SEVER THE LINK BETWEEN DISCORD SOUL ${targetUser.tag} AND FANDOM ALTER: ${existingLink.fandomUsername}**`,
-      )
-      .addFields(
-        {
-          name: "🔒 PERMANENT ACTION",
-          value:
-            "**THIS SEVERANCE IS IRREVERSIBLE! THE USER MUST RE-LINK MANUALLY TO RESTORE THE LINK!**",
-          inline: false,
-        },
-        {
-          name: "📜 CONFIRMATION REQUIRED",
-          value:
-            "Click the button below within 60 seconds to proceed with the severance ritual.",
-          inline: false,
-        },
-      )
-      .setFooter({ text: "This confirmation expires in 60 seconds." })
-      .setTimestamp();
-
     const confirmButton = new ButtonBuilder()
       .setCustomId("confirm_severance")
       .setLabel("Sever the Link")
@@ -98,9 +75,16 @@ export async function execute(
     );
 
     const response = await interaction.reply({
-      embeds: [confirmationEmbed],
-      components: [row],
-      flags: MessageFlags.Ephemeral,
+      components: [
+        container("#FF0000")
+          .addTextDisplayComponents(
+            text(
+              `## ⚠️ LINKING SEVERANCE\n**THOU ART ABOUT TO SEVER THE LINK BETWEEN DISCORD SOUL ${targetUser.tag} AND FANDOM ALTER: ${existingLink.fandomUsername}**\n\n**🔒 PERMANENT ACTION**\n**THIS SEVERANCE IS IRREVERSIBLE! THE USER MUST RE-LINK MANUALLY TO RESTORE THE LINK!**\n**📜 CONFIRMATION REQUIRED**\nClick the button below within 60 seconds to proceed with the severance ritual.\n\n-# This confirmation expires in 60 seconds.`,
+            ),
+          )
+          .addActionRowComponents(row),
+      ],
+      flags: V2_EPHEMERAL,
     });
 
     try {
@@ -132,36 +116,19 @@ export async function execute(
           }
         }
 
-        const successEmbed = new EmbedBuilder()
-          .setColor("#FF0000")
-          .setTitle("💔 LINKING SEVERED!")
-          .setDescription(
-            `**THE LINK BETWEEN ${targetUser.tag} AND FANDOM ALTER "${existingLink.fandomUsername}" HATH BEEN SEVERED!**`,
-          )
-          .addFields(
-            {
-              name: "EXECUTOR OF SEVERANCE",
-              value: executor.user.tag,
-              inline: true,
-            },
-            {
-              name: "SEVERED LINK",
-              value: `Discord: ${targetUser.tag}\nFandom: ${existingLink.fandomUsername}`,
-              inline: true,
-            },
-            {
-              name: "ROLES REMOVED",
-              value: targetMember
-                ? "All linked and Fandom-specific roles have been stripped."
-                : "User not in server - roles could not be modified.",
-              inline: false,
-            },
-          )
-          .setTimestamp();
-
         await interaction.editReply({
-          embeds: [successEmbed],
-          components: [],
+          components: [
+            container("#FF0000").addTextDisplayComponents(
+              text(
+                `## 💔 LINKING SEVERED!\n**THE LINK BETWEEN ${targetUser.tag} AND FANDOM ALTER "${existingLink.fandomUsername}" HATH BEEN SEVERED!**\n\n**EXECUTOR OF SEVERANCE**\n${executor.user.tag}\n**SEVERED LINK**\nDiscord: ${targetUser.tag}\nFandom: ${existingLink.fandomUsername}\n**ROLES REMOVED**\n${
+                  targetMember
+                    ? "All linked and Fandom-specific roles have been stripped."
+                    : "User not in server - roles could not be modified."
+                }`,
+              ),
+            ),
+          ],
+          flags: V2,
         });
 
         try {
@@ -173,18 +140,22 @@ export async function execute(
         }
       } else if (confirmation.customId === "cancel_severance") {
         await confirmation.update({
-          content:
-            "**THE SEVERANCE RITUAL HATH BEEN CANCELED. THE LINK REMAINS INTACT.**",
-          embeds: [],
-          components: [],
+          components: [
+            text(
+              "**THE SEVERANCE RITUAL HATH BEEN CANCELED. THE LINK REMAINS INTACT.**",
+            ),
+          ],
+          flags: V2,
         });
       }
     } catch (error) {
       await interaction.editReply({
-        content:
-          "**⏰ THE SEVERANCE RITUAL HAS EXPIRED. NO CHANGES WERE MADE.**",
-        embeds: [],
-        components: [],
+        components: [
+          text(
+            "**⏰ THE SEVERANCE RITUAL HAS EXPIRED. NO CHANGES WERE MADE.**",
+          ),
+        ],
+        flags: V2,
       });
     }
   } catch (error) {

@@ -1,16 +1,17 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
   AttachmentBuilder,
+  User,
 } from "discord.js";
 import { FamilyManager } from "../utils/familyManager.js";
 import { FamilyTreeRenderer, TreeMember } from "../utils/familyTreeRenderer.js";
+import { container, gallery, section, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("family")
@@ -112,6 +113,275 @@ export const data = new SlashCommandBuilder()
       ),
   );
 
+function box(color: string, title: string, body: string) {
+  return container(color).addTextDisplayComponents(text(`## ${title}\n${body}`));
+}
+
+function note(color: string, md: string) {
+  return container(color).addTextDisplayComponents(text(md));
+}
+
+function withRow(
+  color: string,
+  title: string,
+  body: string,
+  row: ActionRowBuilder<ButtonBuilder>,
+) {
+  return box(color, title, body).addActionRowComponents(row);
+}
+
+function proposal(
+  color: string,
+  title: string,
+  body: string,
+  avatarUrl: string,
+  row: ActionRowBuilder<ButtonBuilder>,
+) {
+  return container(color)
+    .addSectionComponents(section(`## ${title}\n${body}`, avatarUrl))
+    .addActionRowComponents(row);
+}
+
+async function sendProposal(
+  interaction: ChatInputCommandInteraction,
+  targetUser: User,
+  followUp: boolean,
+  opts: {
+    color: string;
+    title: string;
+    body: string;
+    acceptId: string;
+    declineId: string;
+    notForYou: string;
+    timeoutTitle: string;
+    timeoutBody: string;
+    declineTitle: string;
+    declineBody: string;
+    onAccept: () => Promise<{ title: string; body: string }>;
+  },
+) {
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(opts.acceptId)
+      .setLabel("Accept")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(opts.declineId)
+      .setLabel("Decline")
+      .setStyle(ButtonStyle.Danger),
+  );
+
+  const payload = {
+    components: [
+      proposal(
+        opts.color,
+        opts.title,
+        `${targetUser}\n${opts.body}`,
+        targetUser.displayAvatarURL(),
+        row,
+      ),
+    ],
+    allowedMentions: { users: [targetUser.id] },
+    flags: V2,
+  };
+
+  const response = followUp
+    ? await interaction.followUp(payload)
+    : await interaction.reply(payload);
+
+  const collector = response.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    time: 60000,
+  });
+
+  collector.on("collect", async (i) => {
+    if (i.user.id !== targetUser.id) {
+      await i.reply({
+        content: opts.notForYou,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (i.customId === opts.acceptId) {
+      const success = await opts.onAccept();
+      await i.update({
+        components: [box("#00FF00", success.title, success.body)],
+        flags: V2,
+      });
+    } else {
+      await i.update({
+        components: [box("#FF0000", opts.declineTitle, opts.declineBody)],
+        flags: V2,
+      });
+    }
+
+    collector.stop();
+  });
+
+  collector.on("end", async (collected) => {
+    if (collected.size === 0) {
+      await response.edit({
+        components: [box("#808080", opts.timeoutTitle, opts.timeoutBody)],
+        flags: V2,
+      });
+    }
+  });
+}
+
+async function sendWarningThen(
+  interaction: ChatInputCommandInteraction,
+  opts: {
+    title: string;
+    body: string;
+    proceedId: string;
+    cancelId: string;
+    cancelText: string;
+    sendingText: string;
+    sendingColor: string;
+    timeoutBody: string;
+    then: () => Promise<void>;
+  },
+) {
+  const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(opts.proceedId)
+      .setLabel("Proceed Anyway")
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(opts.cancelId)
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  const warningResponse = await interaction.reply({
+    components: [withRow("#FFA500", opts.title, opts.body, confirmRow)],
+    flags: V2,
+  });
+
+  const warningCollector = warningResponse.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    time: 30000,
+  });
+
+  warningCollector.on("collect", async (i) => {
+    if (i.user.id !== interaction.user.id) {
+      await i.reply({
+        content: "**Only the person who initiated this can respond!**",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (i.customId === opts.cancelId) {
+      await i.update({
+        components: [note("#808080", opts.cancelText)],
+        flags: V2,
+      });
+      warningCollector.stop();
+      return;
+    }
+
+    await i.update({
+      components: [note(opts.sendingColor, opts.sendingText)],
+      flags: V2,
+    });
+    warningCollector.stop();
+    await opts.then();
+  });
+
+  warningCollector.on("end", async (collected) => {
+    if (collected.size === 0) {
+      await warningResponse.edit({
+        components: [box("#808080", "⏱️ WARNING EXPIRED", opts.timeoutBody)],
+        flags: V2,
+      });
+    }
+  });
+}
+
+async function sendConfirm(
+  interaction: ChatInputCommandInteraction,
+  opts: {
+    title: string;
+    body: string;
+    confirmId: string;
+    confirmLabel: string;
+    cancelId: string;
+    cancelText: string;
+    timeoutTitle: string;
+    timeoutBody: string;
+    onConfirm: () => Promise<{ title: string; body: string }>;
+  },
+) {
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(opts.confirmId)
+      .setLabel(opts.confirmLabel)
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(opts.cancelId)
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  const response = await interaction.reply({
+    components: [withRow("#FFA500", opts.title, opts.body, row)],
+    flags: V2,
+  });
+
+  const collector = response.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    time: 30000,
+  });
+
+  collector.on("collect", async (i) => {
+    if (i.user.id !== interaction.user.id) {
+      await i.reply({
+        content: "**Only the person who initiated this can respond!**",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (i.customId === opts.confirmId) {
+      const success = await opts.onConfirm();
+      await i.update({
+        components: [box("#808080", success.title, success.body)],
+        flags: V2,
+      });
+    } else {
+      await i.update({
+        components: [note("#808080", opts.cancelText)],
+        flags: V2,
+      });
+    }
+
+    collector.stop();
+  });
+
+  collector.on("end", async (collected) => {
+    if (collected.size === 0) {
+      await response.edit({
+        components: [box("#808080", opts.timeoutTitle, opts.timeoutBody)],
+        flags: V2,
+      });
+    }
+  });
+}
+
+async function tagsOf(
+  interaction: ChatInputCommandInteraction,
+  ids: string[],
+): Promise<string[]> {
+  return Promise.all(
+    ids.map(async (id) => {
+      const user = await interaction.client.users.fetch(id);
+      return user.tag;
+    }),
+  );
+}
+
 export async function execute(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
@@ -172,18 +442,20 @@ export async function execute(
           name: "family-tree.png",
         });
 
-        const embed = new EmbedBuilder()
-          .setColor("#cdcdcd")
-          .setTitle("🌳 FAMILY TREE")
-          .setDescription(
-            `**${targetUser.tag}**'s ${full ? "big old " : ""}family tree!`,
-          )
-          .setImage("attachment://family-tree.png")
-          .setTimestamp();
-
         await interaction.editReply({
-          embeds: [embed],
+          components: [
+            container("#cdcdcd")
+              .addTextDisplayComponents(
+                text(
+                  `## 🌳 FAMILY TREE\n**${targetUser.tag}**'s ${full ? "big old " : ""}family tree!`,
+                ),
+              )
+              .addMediaGalleryComponents(
+                gallery("attachment://family-tree.png"),
+              ),
+          ],
           files: [attachment],
+          flags: V2,
         });
         break;
       }
@@ -208,70 +480,39 @@ export async function execute(
         const parents = await FamilyManager.getParents(targetUser.id);
         const siblings = await FamilyManager.getSiblings(targetUser.id);
 
-        const embed = new EmbedBuilder()
-          .setColor("#FFD700")
-          .setTitle("👤 FAMILY PROFILE")
-          .setDescription(`Family relationships for **${targetUser.tag}**`)
-          .setThumbnail(targetUser.displayAvatarURL())
-          .setTimestamp();
+        const parts = [
+          `## 👤 FAMILY PROFILE\nFamily relationships for **${targetUser.tag}**`,
+        ];
 
         if (spouses.length > 0) {
-          const spouseTags = await Promise.all(
-            spouses.map(async (id) => {
-              const user = await interaction.client.users.fetch(id);
-              return user.tag;
-            }),
+          parts.push(
+            `**💍 ${spouses.length === 1 ? "Spouse" : "Spouses"}**\n${(await tagsOf(interaction, spouses)).join("\n")}`,
           );
-          embed.addFields({
-            name: spouses.length === 1 ? "💍 Spouse" : "💍 Spouses",
-            value: spouseTags.join("\n"),
-            inline: true,
-          });
         }
-
         if (parents.length > 0) {
-          const parentTags = await Promise.all(
-            parents.map(async (id) => {
-              const user = await interaction.client.users.fetch(id);
-              return user.tag;
-            }),
+          parts.push(
+            `**👨‍👩 Parents**\n${(await tagsOf(interaction, parents)).join("\n")}`,
           );
-          embed.addFields({
-            name: "👨‍👩 Parents",
-            value: parentTags.join("\n"),
-            inline: true,
-          });
         }
-
         if (children.length > 0) {
-          const childTags = await Promise.all(
-            children.map(async (id) => {
-              const user = await interaction.client.users.fetch(id);
-              return user.tag;
-            }),
+          parts.push(
+            `**👶 Children**\n${(await tagsOf(interaction, children)).join("\n")}`,
           );
-          embed.addFields({
-            name: "👶 Children",
-            value: childTags.join("\n"),
-            inline: true,
-          });
         }
-
         if (siblings.length > 0) {
-          const siblingTags = await Promise.all(
-            siblings.map(async (id) => {
-              const user = await interaction.client.users.fetch(id);
-              return user.tag;
-            }),
+          parts.push(
+            `**👫 Siblings**\n${(await tagsOf(interaction, siblings)).join("\n")}`,
           );
-          embed.addFields({
-            name: "👫 Siblings",
-            value: siblingTags.join("\n"),
-            inline: true,
-          });
         }
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({
+          components: [
+            container("#FFD700").addSectionComponents(
+              section(parts.join("\n\n"), targetUser.displayAvatarURL()),
+            ),
+          ],
+          flags: V2,
+        });
         break;
       }
 
@@ -309,6 +550,36 @@ export async function execute(
         );
         const targetSpouses = await FamilyManager.getSpouses(targetUser.id);
 
+        const propose = (followUp: boolean) =>
+          sendProposal(interaction, targetUser, followUp, {
+            color: "#FF69B4",
+            title: "💍 MARRIAGE PROPOSAL",
+            body:
+              `**${interaction.user.tag}** has proposed marriage to **${targetUser.tag}**!\n\n` +
+              `${targetUser.tag}, do you accept this sacred union?`,
+            acceptId: "accept_marriage",
+            declineId: "decline_marriage",
+            notForYou: "**THIS PROPOSAL IS NOT FOR YOU!**",
+            timeoutTitle: "⏱️ PROPOSAL EXPIRED",
+            timeoutBody: "The marriage proposal has expired.",
+            declineTitle: "💔 PROPOSAL DECLINED",
+            declineBody: `**${targetUser.tag}** has declined the marriage proposal.`,
+            onAccept: async () => {
+              await FamilyManager.addRelationship(
+                interaction.user.id,
+                targetUser.id,
+                "spouse",
+                interaction.guildId!,
+              );
+              return {
+                title: "💍 MARRIAGE CEREMONY COMPLETE",
+                body:
+                  `**${interaction.user.tag}** and **${targetUser.tag}** are now married!\n\n` +
+                  `May your union be blessed with eternal happiness! 💕`,
+              };
+            },
+          });
+
         if (
           hasExistingRelationship ||
           existingSpouses.length > 0 ||
@@ -342,259 +613,24 @@ export async function execute(
             );
           }
 
-          const confirmRow =
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setCustomId("proceed_marry")
-                .setLabel("Proceed Anyway")
-                .setStyle(ButtonStyle.Danger),
-              new ButtonBuilder()
-                .setCustomId("cancel_marry")
-                .setLabel("Cancel")
-                .setStyle(ButtonStyle.Secondary),
-            );
-
-          const warningEmbed = new EmbedBuilder()
-            .setColor("#FFA500")
-            .setTitle("⚠️ MARRIAGE WARNING")
-            .setDescription(
+          await sendWarningThen(interaction, {
+            title: "⚠️ MARRIAGE WARNING",
+            body:
               warnings.join("\n\n") +
-                "\n\n**This will create a potentially chaotic family tree!**\n\n" +
-                "Are you sure you want to proceed?",
-            )
-            .setTimestamp();
-
-          const warningResponse = await interaction.reply({
-            embeds: [warningEmbed],
-            components: [confirmRow],
+              "\n\n**This will create a potentially chaotic family tree!**\n\n" +
+              "Are you sure you want to proceed?",
+            proceedId: "proceed_marry",
+            cancelId: "cancel_marry",
+            cancelText: "**Marriage proposal cancelled.**",
+            sendingText: "**Sending marriage proposal...**",
+            sendingColor: "#FF69B4",
+            timeoutBody: "Marriage warning timed out.",
+            then: () => propose(true),
           });
-
-          const warningCollector =
-            warningResponse.createMessageComponentCollector({
-              componentType: ComponentType.Button,
-              time: 30000,
-            });
-
-          warningCollector.on("collect", async (i) => {
-            if (i.user.id !== interaction.user.id) {
-              await i.reply({
-                content: "**Only the person who initiated this can respond!**",
-                flags: MessageFlags.Ephemeral,
-              });
-              return;
-            }
-
-            if (i.customId === "cancel_marry") {
-              await i.update({
-                content: "**Marriage proposal cancelled.**",
-                embeds: [],
-                components: [],
-              });
-              warningCollector.stop();
-              return;
-            }
-
-            await i.update({
-              content: "**Sending marriage proposal...**",
-              embeds: [],
-              components: [],
-            });
-            warningCollector.stop();
-
-            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setCustomId("accept_marriage")
-                .setLabel("Accept")
-                .setStyle(ButtonStyle.Success),
-              new ButtonBuilder()
-                .setCustomId("decline_marriage")
-                .setLabel("Decline")
-                .setStyle(ButtonStyle.Danger),
-            );
-
-            const proposalEmbed = new EmbedBuilder()
-              .setColor("#FF69B4")
-              .setTitle("💍 MARRIAGE PROPOSAL")
-              .setDescription(
-                `**${interaction.user.tag}** has proposed marriage to **${targetUser.tag}**!\n\n` +
-                  `${targetUser.tag}, do you accept this sacred union?`,
-              )
-              .setTimestamp();
-
-            const response = await interaction.followUp({
-              content: `${targetUser}`,
-              embeds: [proposalEmbed],
-              components: [row],
-            });
-
-            const collector = response.createMessageComponentCollector({
-              componentType: ComponentType.Button,
-              time: 60000,
-            });
-
-            collector.on("collect", async (buttonInteraction) => {
-              if (buttonInteraction.user.id !== targetUser.id) {
-                await buttonInteraction.reply({
-                  content: "**THIS PROPOSAL IS NOT FOR YOU!**",
-                  flags: MessageFlags.Ephemeral,
-                });
-                return;
-              }
-
-              if (buttonInteraction.customId === "accept_marriage") {
-                await FamilyManager.addRelationship(
-                  interaction.user.id,
-                  targetUser.id,
-                  "spouse",
-                  interaction.guildId!,
-                );
-
-                const successEmbed = new EmbedBuilder()
-                  .setColor("#00FF00")
-                  .setTitle("💍 MARRIAGE CEREMONY COMPLETE")
-                  .setDescription(
-                    `**${interaction.user.tag}** and **${targetUser.tag}** are now married!\n\n` +
-                      `May your union be blessed with eternal happiness! 💕`,
-                  )
-                  .setTimestamp();
-
-                await buttonInteraction.update({
-                  embeds: [successEmbed],
-                  components: [],
-                });
-              } else {
-                const declineEmbed = new EmbedBuilder()
-                  .setColor("#FF0000")
-                  .setTitle("💔 PROPOSAL DECLINED")
-                  .setDescription(
-                    `**${targetUser.tag}** has declined the marriage proposal.`,
-                  )
-                  .setTimestamp();
-
-                await buttonInteraction.update({
-                  embeds: [declineEmbed],
-                  components: [],
-                });
-              }
-
-              collector.stop();
-            });
-
-            collector.on("end", async (collected) => {
-              if (collected.size === 0) {
-                const timeoutEmbed = new EmbedBuilder()
-                  .setColor("#808080")
-                  .setTitle("⏱️ PROPOSAL EXPIRED")
-                  .setDescription("The marriage proposal has expired.")
-                  .setTimestamp();
-
-                await response.edit({ embeds: [timeoutEmbed], components: [] });
-              }
-            });
-          });
-
-          warningCollector.on("end", async (collected) => {
-            if (collected.size === 0) {
-              const timeoutEmbed = new EmbedBuilder()
-                .setColor("#808080")
-                .setTitle("⏱️ WARNING EXPIRED")
-                .setDescription("Marriage warning timed out.")
-                .setTimestamp();
-
-              await warningResponse.edit({
-                embeds: [timeoutEmbed],
-                components: [],
-              });
-            }
-          });
-
           return;
         }
 
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("accept_marriage")
-            .setLabel("Accept")
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId("decline_marriage")
-            .setLabel("Decline")
-            .setStyle(ButtonStyle.Danger),
-        );
-
-        const proposalEmbed = new EmbedBuilder()
-          .setColor("#FF69B4")
-          .setTitle("💍 MARRIAGE PROPOSAL")
-          .setDescription(
-            `**${interaction.user.tag}** has proposed marriage to **${targetUser.tag}**!\n\n` +
-              `${targetUser.tag}, do you accept this sacred union?`,
-          )
-          .setTimestamp();
-
-        const response = await interaction.reply({
-          content: `${targetUser}`,
-          embeds: [proposalEmbed],
-          components: [row],
-        });
-
-        const collector = response.createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 60000,
-        });
-
-        collector.on("collect", async (i) => {
-          if (i.user.id !== targetUser.id) {
-            await i.reply({
-              content: "**THIS PROPOSAL IS NOT FOR YOU!**",
-              flags: MessageFlags.Ephemeral,
-            });
-            return;
-          }
-
-          if (i.customId === "accept_marriage") {
-            await FamilyManager.addRelationship(
-              interaction.user.id,
-              targetUser.id,
-              "spouse",
-              interaction.guildId!,
-            );
-
-            const successEmbed = new EmbedBuilder()
-              .setColor("#00FF00")
-              .setTitle("💍 MARRIAGE CEREMONY COMPLETE")
-              .setDescription(
-                `**${interaction.user.tag}** and **${targetUser.tag}** are now married!\n\n` +
-                  `May your union be blessed with eternal happiness! 💕`,
-              )
-              .setTimestamp();
-
-            await i.update({ embeds: [successEmbed], components: [] });
-          } else {
-            const declineEmbed = new EmbedBuilder()
-              .setColor("#FF0000")
-              .setTitle("💔 PROPOSAL DECLINED")
-              .setDescription(
-                `**${targetUser.tag}** has declined the marriage proposal.`,
-              )
-              .setTimestamp();
-
-            await i.update({ embeds: [declineEmbed], components: [] });
-          }
-
-          collector.stop();
-        });
-
-        collector.on("end", async (collected) => {
-          if (collected.size === 0) {
-            const timeoutEmbed = new EmbedBuilder()
-              .setColor("#808080")
-              .setTitle("⏱️ PROPOSAL EXPIRED")
-              .setDescription("The marriage proposal has expired.")
-              .setTimestamp();
-
-            await response.edit({ embeds: [timeoutEmbed], components: [] });
-          }
-        });
+        await propose(false);
         break;
       }
 
@@ -610,82 +646,28 @@ export async function execute(
           return;
         }
 
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("confirm_divorce")
-            .setLabel("Confirm Divorce")
-            .setStyle(ButtonStyle.Danger),
-          new ButtonBuilder()
-            .setCustomId("cancel_divorce")
-            .setLabel("Cancel")
-            .setStyle(ButtonStyle.Secondary),
-        );
-
-        const confirmEmbed = new EmbedBuilder()
-          .setColor("#FFA500")
-          .setTitle("⚠️ DIVORCE CONFIRMATION")
-          .setDescription(
+        await sendConfirm(interaction, {
+          title: "⚠️ DIVORCE CONFIRMATION",
+          body:
             `**${interaction.user.tag}**, are you sure you want to divorce **${targetUser.tag}**?\n\n` +
-              `This action will end your marriage.`,
-          )
-          .setTimestamp();
-
-        const response = await interaction.reply({
-          embeds: [confirmEmbed],
-          components: [row],
-        });
-
-        const collector = response.createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 30000,
-        });
-
-        collector.on("collect", async (i) => {
-          if (i.user.id !== interaction.user.id) {
-            await i.reply({
-              content: "**Only the person who initiated this can respond!**",
-              flags: MessageFlags.Ephemeral,
-            });
-            return;
-          }
-
-          if (i.customId === "confirm_divorce") {
+            `This action will end your marriage.`,
+          confirmId: "confirm_divorce",
+          confirmLabel: "Confirm Divorce",
+          cancelId: "cancel_divorce",
+          cancelText: "**Divorce cancelled.**",
+          timeoutTitle: "⏱️ REQUEST EXPIRED",
+          timeoutBody: "Divorce request timed out.",
+          onConfirm: async () => {
             await FamilyManager.removeRelationship(
               interaction.user.id,
               targetUser.id,
               "spouse",
             );
-
-            const successEmbed = new EmbedBuilder()
-              .setColor("#808080")
-              .setTitle("💔 DIVORCE FINALIZED")
-              .setDescription(
-                `**${interaction.user.tag}** and **${targetUser.tag}** are no longer married.`,
-              )
-              .setTimestamp();
-
-            await i.update({ embeds: [successEmbed], components: [] });
-          } else {
-            await i.update({
-              content: "**Divorce cancelled.**",
-              embeds: [],
-              components: [],
-            });
-          }
-
-          collector.stop();
-        });
-
-        collector.on("end", async (collected) => {
-          if (collected.size === 0) {
-            const timeoutEmbed = new EmbedBuilder()
-              .setColor("#808080")
-              .setTitle("⏱️ REQUEST EXPIRED")
-              .setDescription("Divorce request timed out.")
-              .setTimestamp();
-
-            await response.edit({ embeds: [timeoutEmbed], components: [] });
-          }
+            return {
+              title: "💔 DIVORCE FINALIZED",
+              body: `**${interaction.user.tag}** and **${targetUser.tag}** are no longer married.`,
+            };
+          },
         });
         break;
       }
@@ -720,260 +702,55 @@ export async function execute(
           targetUser.id,
         );
 
+        const propose = (followUp: boolean) =>
+          sendProposal(interaction, targetUser, followUp, {
+            color: "#87CEEB",
+            title: "👶 ADOPTION REQUEST",
+            body:
+              `**${interaction.user.tag}** wants to adopt **${targetUser.tag}**!\n\n` +
+              `${targetUser.tag}, do you accept?`,
+            acceptId: "accept_adoption",
+            declineId: "decline_adoption",
+            notForYou: "**THIS ADOPTION REQUEST IS NOT FOR YOU!**",
+            timeoutTitle: "⏱️ ADOPTION EXPIRED",
+            timeoutBody: "The adoption request has expired.",
+            declineTitle: "❌ ADOPTION DECLINED",
+            declineBody: `**${targetUser.tag}** has declined the adoption request.`,
+            onAccept: async () => {
+              await FamilyManager.addRelationship(
+                interaction.user.id,
+                targetUser.id,
+                "parent",
+                interaction.guildId!,
+              );
+              return {
+                title: "👶 ADOPTION COMPLETE",
+                body:
+                  `**${interaction.user.tag}** has successfully adopted **${targetUser.tag}**!\n\n` +
+                  `Welcome to the family! 👨‍👩‍👧‍👦`,
+              };
+            },
+          });
+
         if (hasExistingRelationship) {
-          const confirmRow =
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setCustomId("proceed_adopt")
-                .setLabel("Proceed Anyway")
-                .setStyle(ButtonStyle.Danger),
-              new ButtonBuilder()
-                .setCustomId("cancel_adopt")
-                .setLabel("Cancel")
-                .setStyle(ButtonStyle.Secondary),
-            );
-
-          const warningEmbed = new EmbedBuilder()
-            .setColor("#FFA500")
-            .setTitle("⚠️ ADOPTION WARNING")
-            .setDescription(
+          await sendWarningThen(interaction, {
+            title: "⚠️ ADOPTION WARNING",
+            body:
               `⚠️ **You already have a family relationship with ${targetUser.tag}!**\n\n` +
-                "**This will create a potentially chaotic family tree!**\n\n" +
-                "Are you sure you want to proceed?",
-            )
-            .setTimestamp();
-
-          const warningResponse = await interaction.reply({
-            embeds: [warningEmbed],
-            components: [confirmRow],
+              "**This will create a potentially chaotic family tree!**\n\n" +
+              "Are you sure you want to proceed?",
+            proceedId: "proceed_adopt",
+            cancelId: "cancel_adopt",
+            cancelText: "**Adoption request cancelled.**",
+            sendingText: "**Sending adoption request...**",
+            sendingColor: "#87CEEB",
+            timeoutBody: "Adoption warning timed out.",
+            then: () => propose(true),
           });
-
-          const warningCollector =
-            warningResponse.createMessageComponentCollector({
-              componentType: ComponentType.Button,
-              time: 30000,
-            });
-
-          warningCollector.on("collect", async (i) => {
-            if (i.user.id !== interaction.user.id) {
-              await i.reply({
-                content: "**Only the person who initiated this can respond!**",
-                flags: MessageFlags.Ephemeral,
-              });
-              return;
-            }
-
-            if (i.customId === "cancel_adopt") {
-              await i.update({
-                content: "**Adoption request cancelled.**",
-                embeds: [],
-                components: [],
-              });
-              warningCollector.stop();
-              return;
-            }
-
-            await i.update({
-              content: "**Sending adoption request...**",
-              embeds: [],
-              components: [],
-            });
-            warningCollector.stop();
-
-            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setCustomId("accept_adoption")
-                .setLabel("Accept")
-                .setStyle(ButtonStyle.Success),
-              new ButtonBuilder()
-                .setCustomId("decline_adoption")
-                .setLabel("Decline")
-                .setStyle(ButtonStyle.Danger),
-            );
-
-            const adoptionEmbed = new EmbedBuilder()
-              .setColor("#87CEEB")
-              .setTitle("👶 ADOPTION REQUEST")
-              .setDescription(
-                `**${interaction.user.tag}** wants to adopt **${targetUser.tag}**!\n\n` +
-                  `${targetUser.tag}, do you accept?`,
-              )
-              .setTimestamp();
-
-            const response = await interaction.followUp({
-              content: `${targetUser}`,
-              embeds: [adoptionEmbed],
-              components: [row],
-            });
-
-            const collector = response.createMessageComponentCollector({
-              componentType: ComponentType.Button,
-              time: 60000,
-            });
-
-            collector.on("collect", async (buttonInteraction) => {
-              if (buttonInteraction.user.id !== targetUser.id) {
-                await buttonInteraction.reply({
-                  content: "**THIS ADOPTION REQUEST IS NOT FOR YOU!**",
-                  flags: MessageFlags.Ephemeral,
-                });
-                return;
-              }
-
-              if (buttonInteraction.customId === "accept_adoption") {
-                await FamilyManager.addRelationship(
-                  interaction.user.id,
-                  targetUser.id,
-                  "parent",
-                  interaction.guildId!,
-                );
-
-                const successEmbed = new EmbedBuilder()
-                  .setColor("#00FF00")
-                  .setTitle("👶 ADOPTION COMPLETE")
-                  .setDescription(
-                    `**${interaction.user.tag}** has successfully adopted **${targetUser.tag}**!\n\n` +
-                      `Welcome to the family! 👨‍👩‍👧‍👦`,
-                  )
-                  .setTimestamp();
-
-                await buttonInteraction.update({
-                  embeds: [successEmbed],
-                  components: [],
-                });
-              } else {
-                const declineEmbed = new EmbedBuilder()
-                  .setColor("#FF0000")
-                  .setTitle("❌ ADOPTION DECLINED")
-                  .setDescription(
-                    `**${targetUser.tag}** has declined the adoption request.`,
-                  )
-                  .setTimestamp();
-
-                await buttonInteraction.update({
-                  embeds: [declineEmbed],
-                  components: [],
-                });
-              }
-
-              collector.stop();
-            });
-
-            collector.on("end", async (collected) => {
-              if (collected.size === 0) {
-                const timeoutEmbed = new EmbedBuilder()
-                  .setColor("#808080")
-                  .setTitle("⏱️ ADOPTION EXPIRED")
-                  .setDescription("The adoption request has expired.")
-                  .setTimestamp();
-
-                await response.edit({ embeds: [timeoutEmbed], components: [] });
-              }
-            });
-          });
-
-          warningCollector.on("end", async (collected) => {
-            if (collected.size === 0) {
-              const timeoutEmbed = new EmbedBuilder()
-                .setColor("#808080")
-                .setTitle("⏱️ WARNING EXPIRED")
-                .setDescription("Adoption warning timed out.")
-                .setTimestamp();
-
-              await warningResponse.edit({
-                embeds: [timeoutEmbed],
-                components: [],
-              });
-            }
-          });
-
           return;
         }
 
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("accept_adoption")
-            .setLabel("Accept")
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId("decline_adoption")
-            .setLabel("Decline")
-            .setStyle(ButtonStyle.Danger),
-        );
-
-        const adoptionEmbed = new EmbedBuilder()
-          .setColor("#87CEEB")
-          .setTitle("👶 ADOPTION REQUEST")
-          .setDescription(
-            `**${interaction.user.tag}** wants to adopt **${targetUser.tag}**!\n\n` +
-              `${targetUser.tag}, do you accept?`,
-          )
-          .setTimestamp();
-
-        const response = await interaction.reply({
-          content: `${targetUser}`,
-          embeds: [adoptionEmbed],
-          components: [row],
-        });
-
-        const collector = response.createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 60000,
-        });
-
-        collector.on("collect", async (i) => {
-          if (i.user.id !== targetUser.id) {
-            await i.reply({
-              content: "**THIS ADOPTION REQUEST IS NOT FOR YOU!**",
-              flags: MessageFlags.Ephemeral,
-            });
-            return;
-          }
-
-          if (i.customId === "accept_adoption") {
-            await FamilyManager.addRelationship(
-              interaction.user.id,
-              targetUser.id,
-              "parent",
-              interaction.guildId!,
-            );
-
-            const successEmbed = new EmbedBuilder()
-              .setColor("#00FF00")
-              .setTitle("👶 ADOPTION COMPLETE")
-              .setDescription(
-                `**${interaction.user.tag}** has successfully adopted **${targetUser.tag}**!\n\n` +
-                  `Welcome to the family! 👨‍👩‍👧‍👦`,
-              )
-              .setTimestamp();
-
-            await i.update({ embeds: [successEmbed], components: [] });
-          } else {
-            const declineEmbed = new EmbedBuilder()
-              .setColor("#FF0000")
-              .setTitle("❌ ADOPTION DECLINED")
-              .setDescription(
-                `**${targetUser.tag}** has declined the adoption request.`,
-              )
-              .setTimestamp();
-
-            await i.update({ embeds: [declineEmbed], components: [] });
-          }
-
-          collector.stop();
-        });
-
-        collector.on("end", async (collected) => {
-          if (collected.size === 0) {
-            const timeoutEmbed = new EmbedBuilder()
-              .setColor("#808080")
-              .setTitle("⏱️ ADOPTION EXPIRED")
-              .setDescription("The adoption request has expired.")
-              .setTimestamp();
-
-            await response.edit({ embeds: [timeoutEmbed], components: [] });
-          }
-        });
+        await propose(false);
         break;
       }
 
@@ -994,46 +771,18 @@ export async function execute(
           return;
         }
 
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("confirm_disown")
-            .setLabel("Confirm")
-            .setStyle(ButtonStyle.Danger),
-          new ButtonBuilder()
-            .setCustomId("cancel_disown")
-            .setLabel("Cancel")
-            .setStyle(ButtonStyle.Secondary),
-        );
-
         const relationshipType = isChild ? "child" : "parent";
-        const confirmEmbed = new EmbedBuilder()
-          .setColor("#FFA500")
-          .setTitle("⚠️ DISOWN CONFIRMATION")
-          .setDescription(
-            `**${interaction.user.tag}**, are you sure you want to disown your ${relationshipType} **${targetUser.tag}**?`,
-          )
-          .setTimestamp();
 
-        const response = await interaction.reply({
-          embeds: [confirmEmbed],
-          components: [row],
-        });
-
-        const collector = response.createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 30000,
-        });
-
-        collector.on("collect", async (i) => {
-          if (i.user.id !== interaction.user.id) {
-            await i.reply({
-              content: "**Only the person who initiated this can respond!**",
-              flags: MessageFlags.Ephemeral,
-            });
-            return;
-          }
-
-          if (i.customId === "confirm_disown") {
+        await sendConfirm(interaction, {
+          title: "⚠️ DISOWN CONFIRMATION",
+          body: `**${interaction.user.tag}**, are you sure you want to disown your ${relationshipType} **${targetUser.tag}**?`,
+          confirmId: "confirm_disown",
+          confirmLabel: "Confirm",
+          cancelId: "cancel_disown",
+          cancelText: "**Action cancelled.**",
+          timeoutTitle: "⏱️ REQUEST EXPIRED",
+          timeoutBody: "Disown request timed out.",
+          onConfirm: async () => {
             if (isChild) {
               await FamilyManager.removeRelationship(
                 interaction.user.id,
@@ -1047,37 +796,11 @@ export async function execute(
                 "parent",
               );
             }
-
-            const successEmbed = new EmbedBuilder()
-              .setColor("#808080")
-              .setTitle("💔 RELATIONSHIP REMOVED")
-              .setDescription(
-                `The ${relationshipType} relationship with **${targetUser.tag}** has been removed.`,
-              )
-              .setTimestamp();
-
-            await i.update({ embeds: [successEmbed], components: [] });
-          } else {
-            await i.update({
-              content: "**Action cancelled.**",
-              embeds: [],
-              components: [],
-            });
-          }
-
-          collector.stop();
-        });
-
-        collector.on("end", async (collected) => {
-          if (collected.size === 0) {
-            const timeoutEmbed = new EmbedBuilder()
-              .setColor("#808080")
-              .setTitle("⏱️ REQUEST EXPIRED")
-              .setDescription("Disown request timed out.")
-              .setTimestamp();
-
-            await response.edit({ embeds: [timeoutEmbed], components: [] });
-          }
+            return {
+              title: "💔 RELATIONSHIP REMOVED",
+              body: `The ${relationshipType} relationship with **${targetUser.tag}** has been removed.`,
+            };
+          },
         });
         break;
       }
@@ -1112,258 +835,53 @@ export async function execute(
           targetUser.id,
         );
 
+        const propose = (followUp: boolean) =>
+          sendProposal(interaction, targetUser, followUp, {
+            color: "#9370DB",
+            title: "👫 SIBLING REQUEST",
+            body:
+              `**${interaction.user.tag}** wants to be siblings with **${targetUser.tag}**!\n\n` +
+              `${targetUser.tag}, do you accept?`,
+            acceptId: "accept_sibling",
+            declineId: "decline_sibling",
+            notForYou: "**THIS SIBLING REQUEST IS NOT FOR YOU!**",
+            timeoutTitle: "⏱️ REQUEST EXPIRED",
+            timeoutBody: "The sibling request has expired.",
+            declineTitle: "❌ REQUEST DECLINED",
+            declineBody: `**${targetUser.tag}** has declined the sibling request.`,
+            onAccept: async () => {
+              await FamilyManager.addRelationship(
+                interaction.user.id,
+                targetUser.id,
+                "sibling",
+                interaction.guildId!,
+              );
+              return {
+                title: "👫 SIBLINGS UNITED",
+                body: `**${interaction.user.tag}** and **${targetUser.tag}** are now siblings!`,
+              };
+            },
+          });
+
         if (hasExistingRelationship) {
-          const confirmRow =
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setCustomId("proceed_sibling")
-                .setLabel("Proceed Anyway")
-                .setStyle(ButtonStyle.Danger),
-              new ButtonBuilder()
-                .setCustomId("cancel_sibling")
-                .setLabel("Cancel")
-                .setStyle(ButtonStyle.Secondary),
-            );
-
-          const warningEmbed = new EmbedBuilder()
-            .setColor("#FFA500")
-            .setTitle("⚠️ SIBLING WARNING")
-            .setDescription(
+          await sendWarningThen(interaction, {
+            title: "⚠️ SIBLING WARNING",
+            body:
               `⚠️ **You already have a family relationship with ${targetUser.tag}!**\n\n` +
-                "**This will create a potentially chaotic family tree!**\n\n" +
-                "Are you sure you want to proceed?",
-            )
-            .setTimestamp();
-
-          const warningResponse = await interaction.reply({
-            embeds: [warningEmbed],
-            components: [confirmRow],
+              "**This will create a potentially chaotic family tree!**\n\n" +
+              "Are you sure you want to proceed?",
+            proceedId: "proceed_sibling",
+            cancelId: "cancel_sibling",
+            cancelText: "**Sibling request cancelled.**",
+            sendingText: "**Sending sibling request...**",
+            sendingColor: "#9370DB",
+            timeoutBody: "Sibling warning timed out.",
+            then: () => propose(true),
           });
-
-          const warningCollector =
-            warningResponse.createMessageComponentCollector({
-              componentType: ComponentType.Button,
-              time: 30000,
-            });
-
-          warningCollector.on("collect", async (i) => {
-            if (i.user.id !== interaction.user.id) {
-              await i.reply({
-                content: "**Only the person who initiated this can respond!**",
-                flags: MessageFlags.Ephemeral,
-              });
-              return;
-            }
-
-            if (i.customId === "cancel_sibling") {
-              await i.update({
-                content: "**Sibling request cancelled.**",
-                embeds: [],
-                components: [],
-              });
-              warningCollector.stop();
-              return;
-            }
-
-            await i.update({
-              content: "**Sending sibling request...**",
-              embeds: [],
-              components: [],
-            });
-            warningCollector.stop();
-
-            const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setCustomId("accept_sibling")
-                .setLabel("Accept")
-                .setStyle(ButtonStyle.Success),
-              new ButtonBuilder()
-                .setCustomId("decline_sibling")
-                .setLabel("Decline")
-                .setStyle(ButtonStyle.Danger),
-            );
-
-            const siblingEmbed = new EmbedBuilder()
-              .setColor("#9370DB")
-              .setTitle("👫 SIBLING REQUEST")
-              .setDescription(
-                `**${interaction.user.tag}** wants to be siblings with **${targetUser.tag}**!\n\n` +
-                  `${targetUser.tag}, do you accept?`,
-              )
-              .setTimestamp();
-
-            const response = await interaction.followUp({
-              content: `${targetUser}`,
-              embeds: [siblingEmbed],
-              components: [row],
-            });
-
-            const collector = response.createMessageComponentCollector({
-              componentType: ComponentType.Button,
-              time: 60000,
-            });
-
-            collector.on("collect", async (buttonInteraction) => {
-              if (buttonInteraction.user.id !== targetUser.id) {
-                await buttonInteraction.reply({
-                  content: "**THIS SIBLING REQUEST IS NOT FOR YOU!**",
-                  flags: MessageFlags.Ephemeral,
-                });
-                return;
-              }
-
-              if (buttonInteraction.customId === "accept_sibling") {
-                await FamilyManager.addRelationship(
-                  interaction.user.id,
-                  targetUser.id,
-                  "sibling",
-                  interaction.guildId!,
-                );
-
-                const successEmbed = new EmbedBuilder()
-                  .setColor("#00FF00")
-                  .setTitle("👫 SIBLINGS UNITED")
-                  .setDescription(
-                    `**${interaction.user.tag}** and **${targetUser.tag}** are now siblings!`,
-                  )
-                  .setTimestamp();
-
-                await buttonInteraction.update({
-                  embeds: [successEmbed],
-                  components: [],
-                });
-              } else {
-                const declineEmbed = new EmbedBuilder()
-                  .setColor("#FF0000")
-                  .setTitle("❌ REQUEST DECLINED")
-                  .setDescription(
-                    `**${targetUser.tag}** has declined the sibling request.`,
-                  )
-                  .setTimestamp();
-
-                await buttonInteraction.update({
-                  embeds: [declineEmbed],
-                  components: [],
-                });
-              }
-
-              collector.stop();
-            });
-
-            collector.on("end", async (collected) => {
-              if (collected.size === 0) {
-                const timeoutEmbed = new EmbedBuilder()
-                  .setColor("#808080")
-                  .setTitle("⏱️ REQUEST EXPIRED")
-                  .setDescription("The sibling request has expired.")
-                  .setTimestamp();
-
-                await response.edit({ embeds: [timeoutEmbed], components: [] });
-              }
-            });
-          });
-
-          warningCollector.on("end", async (collected) => {
-            if (collected.size === 0) {
-              const timeoutEmbed = new EmbedBuilder()
-                .setColor("#808080")
-                .setTitle("⏱️ WARNING EXPIRED")
-                .setDescription("Sibling warning timed out.")
-                .setTimestamp();
-
-              await warningResponse.edit({
-                embeds: [timeoutEmbed],
-                components: [],
-              });
-            }
-          });
-
           return;
         }
 
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("accept_sibling")
-            .setLabel("Accept")
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId("decline_sibling")
-            .setLabel("Decline")
-            .setStyle(ButtonStyle.Danger),
-        );
-
-        const siblingEmbed = new EmbedBuilder()
-          .setColor("#9370DB")
-          .setTitle("👫 SIBLING REQUEST")
-          .setDescription(
-            `**${interaction.user.tag}** wants to be siblings with **${targetUser.tag}**!\n\n` +
-              `${targetUser.tag}, do you accept?`,
-          )
-          .setTimestamp();
-
-        const response = await interaction.reply({
-          content: `${targetUser}`,
-          embeds: [siblingEmbed],
-          components: [row],
-        });
-
-        const collector = response.createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 60000,
-        });
-
-        collector.on("collect", async (i) => {
-          if (i.user.id !== targetUser.id) {
-            await i.reply({
-              content: "**THIS SIBLING REQUEST IS NOT FOR YOU!**",
-              flags: MessageFlags.Ephemeral,
-            });
-            return;
-          }
-
-          if (i.customId === "accept_sibling") {
-            await FamilyManager.addRelationship(
-              interaction.user.id,
-              targetUser.id,
-              "sibling",
-              interaction.guildId!,
-            );
-
-            const successEmbed = new EmbedBuilder()
-              .setColor("#00FF00")
-              .setTitle("👫 SIBLINGS UNITED")
-              .setDescription(
-                `**${interaction.user.tag}** and **${targetUser.tag}** are now siblings!`,
-              )
-              .setTimestamp();
-
-            await i.update({ embeds: [successEmbed], components: [] });
-          } else {
-            const declineEmbed = new EmbedBuilder()
-              .setColor("#FF0000")
-              .setTitle("❌ REQUEST DECLINED")
-              .setDescription(
-                `**${targetUser.tag}** has declined the sibling request.`,
-              )
-              .setTimestamp();
-
-            await i.update({ embeds: [declineEmbed], components: [] });
-          }
-
-          collector.stop();
-        });
-
-        collector.on("end", async (collected) => {
-          if (collected.size === 0) {
-            const timeoutEmbed = new EmbedBuilder()
-              .setColor("#808080")
-              .setTitle("⏱️ REQUEST EXPIRED")
-              .setDescription("The sibling request has expired.")
-              .setTimestamp();
-
-            await response.edit({ embeds: [timeoutEmbed], components: [] });
-          }
-        });
+        await propose(false);
         break;
       }
 
@@ -1379,81 +897,26 @@ export async function execute(
           return;
         }
 
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId("confirm_unsibling")
-            .setLabel("Confirm")
-            .setStyle(ButtonStyle.Danger),
-          new ButtonBuilder()
-            .setCustomId("cancel_unsibling")
-            .setLabel("Cancel")
-            .setStyle(ButtonStyle.Secondary),
-        );
-
-        const confirmEmbed = new EmbedBuilder()
-          .setColor("#FFA500")
-          .setTitle("⚠️ REMOVE SIBLING")
-          .setDescription(
-            `**${interaction.user.tag}**, are you sure you want to remove your sibling relationship with **${targetUser.tag}**?`,
-          )
-          .setTimestamp();
-
-        const response = await interaction.reply({
-          embeds: [confirmEmbed],
-          components: [row],
-        });
-
-        const collector = response.createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 30000,
-        });
-
-        collector.on("collect", async (i) => {
-          if (i.user.id !== interaction.user.id) {
-            await i.reply({
-              content: "**Only the person who initiated this can respond!**",
-              flags: MessageFlags.Ephemeral,
-            });
-            return;
-          }
-
-          if (i.customId === "confirm_unsibling") {
+        await sendConfirm(interaction, {
+          title: "⚠️ REMOVE SIBLING",
+          body: `**${interaction.user.tag}**, are you sure you want to remove your sibling relationship with **${targetUser.tag}**?`,
+          confirmId: "confirm_unsibling",
+          confirmLabel: "Confirm",
+          cancelId: "cancel_unsibling",
+          cancelText: "**Action cancelled.**",
+          timeoutTitle: "⏱️ REQUEST EXPIRED",
+          timeoutBody: "Unsibling request timed out.",
+          onConfirm: async () => {
             await FamilyManager.removeRelationship(
               interaction.user.id,
               targetUser.id,
               "sibling",
             );
-
-            const successEmbed = new EmbedBuilder()
-              .setColor("#808080")
-              .setTitle("💔 SIBLING RELATIONSHIP REMOVED")
-              .setDescription(
-                `You are no longer siblings with **${targetUser.tag}**.`,
-              )
-              .setTimestamp();
-
-            await i.update({ embeds: [successEmbed], components: [] });
-          } else {
-            await i.update({
-              content: "**Action cancelled.**",
-              embeds: [],
-              components: [],
-            });
-          }
-
-          collector.stop();
-        });
-
-        collector.on("end", async (collected) => {
-          if (collected.size === 0) {
-            const timeoutEmbed = new EmbedBuilder()
-              .setColor("#808080")
-              .setTitle("⏱️ REQUEST EXPIRED")
-              .setDescription("Unsibling request timed out.")
-              .setTimestamp();
-
-            await response.edit({ embeds: [timeoutEmbed], components: [] });
-          }
+            return {
+              title: "💔 SIBLING RELATIONSHIP REMOVED",
+              body: `You are no longer siblings with **${targetUser.tag}**.`,
+            };
+          },
         });
         break;
       }

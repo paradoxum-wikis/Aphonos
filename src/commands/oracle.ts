@@ -1,7 +1,7 @@
 import {
   ChatInputCommandInteraction,
-  SlashCommandBuilder,
   EmbedBuilder,
+  SlashCommandBuilder,
 } from "discord.js";
 
 const responses = [
@@ -51,8 +51,8 @@ export async function execute(
     .setTitle("🎱 THE ORACLE")
     .setDescription("**Seek the wisdom of the oracles!**")
     .addFields(
-      { name: "Thy Query:", value: `"${question}"`, inline: false },
-      { name: "The Oracle's Decree:", value: `**${response}**`, inline: false },
+      { name: "Thy Query", value: `"${question}"`, inline: false },
+      { name: "The Oracle's Decree", value: `**${response}**`, inline: false },
     )
     .setFooter({ text: "Their words are truth." })
     .setTimestamp();

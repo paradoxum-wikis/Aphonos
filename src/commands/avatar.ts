@@ -1,11 +1,11 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   GuildMember,
   MessageFlags,
   User,
 } from "discord.js";
+import { container, section, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("avatar")
@@ -52,11 +52,11 @@ export async function execute(
     const isAnimatedAvatar = avatarHash?.startsWith("a_");
     const avatarURL =
       freshTargetMember?.displayAvatarURL({
-        size: 512,
+        size: 4096,
         extension: isAnimatedAvatar ? "gif" : "png",
       }) ??
       targetUser.displayAvatarURL({
-        size: 512,
+        size: 4096,
         extension: isAnimatedAvatar ? "gif" : "png",
       });
 
@@ -64,35 +64,34 @@ export async function execute(
     const isAnimatedBanner = bannerHash?.startsWith("a_");
     const bannerURL =
       freshTargetMember?.displayBannerURL({
-        size: 1024,
+        size: 4096,
         extension: isAnimatedBanner ? "gif" : "png",
       }) ||
       targetUser.bannerURL({
-        size: 1024,
+        size: 4096,
         extension: isAnimatedBanner ? "gif" : "png",
       });
 
-    const embed = new EmbedBuilder()
-      .setColor(targetUser.hexAccentColor || "#B2BEB5")
-      .setTitle(`🖼️ VISAGE OF ${targetUser.tag.toUpperCase()}`)
-      .setDescription(`[View Avatar](${avatarURL})`)
-      .setImage(avatarURL);
-
+    const c = container(targetUser.hexAccentColor || "#B2BEB5").addSectionComponents(
+      section(
+        `## ${targetUser.tag}\n[Avatar](${avatarURL})`,
+        avatarURL,
+      ),
+    );
     if (bannerURL) {
-      embed.addFields({
-        name: "Banner",
-        value: `[View Banner](${bannerURL})`,
-        inline: false,
-      });
+      c.addSectionComponents(
+        section(`**Banner**\n[Open](${bannerURL})`, bannerURL),
+      );
     } else if (targetUser.hexAccentColor) {
-      embed.addFields({
-        name: "Banner Color",
-        value: `Hex: ${targetUser.hexAccentColor}`,
-        inline: false,
-      });
+      c.addTextDisplayComponents(
+        text(`Banner color: ${targetUser.hexAccentColor}`),
+      );
     }
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [c],
+      flags: V2,
+    });
   } catch (error) {
     console.error("Error displaying avatar/banner:", error);
     await interaction.reply({

@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { AttachmentBuilder, EmbedBuilder } from "discord.js";
+import { AttachmentBuilder, type ContainerBuilder } from "discord.js";
+import { container, section } from "../v2.js";
 import type { RefereeArcanaId } from "./types.js";
 import { COLOR } from "./ui.js";
 
@@ -71,10 +72,26 @@ export function arcanaImageUrl(id: ArcanaArtId): string {
   return `attachment://${arcanaFilename(id)}`;
 }
 
-export function arcanaCardEmbed(id: ArcanaArtId): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(COLOR.neutral)
-    .setTitle(arcanaFullName(id))
-    .setDescription(ARCANA_EFFECT[id])
-    .setThumbnail(arcanaImageUrl(id));
+export function arcanaCard(
+  id: ArcanaArtId,
+  color: number = COLOR.neutral,
+): ContainerBuilder {
+  return arcanaCards([id], color);
+}
+
+export function arcanaCards(
+  ids: ArcanaArtId[],
+  color: number = COLOR.neutral,
+): ContainerBuilder {
+  const c = container(color);
+  for (const [i, id] of ids.entries()) {
+    if (i) c.addSeparatorComponents((s) => s);
+    c.addSectionComponents(
+      section(
+        `## ${arcanaFullName(id)}\n${ARCANA_EFFECT[id]}`,
+        arcanaImageUrl(id),
+      ),
+    );
+  }
+  return c;
 }

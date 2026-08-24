@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   GuildMember,
   MessageFlags,
   ActionRowBuilder,
@@ -13,6 +12,7 @@ import { LinkLogger } from "../utils/linkLogger.js";
 import { TOP_CONTRIBUTORS_ROLE_ID } from "../utils/roleConstants.js";
 import { TopContributorsManager } from "../utils/topContributors.js";
 import { FandomRoleManager } from "../utils/fandomRoleManager.js";
+import { container, text, V2, V2_EPHEMERAL } from "../utils/v2.js";
 
 interface FandomUserQueryUser {
   userid: number;
@@ -149,24 +149,16 @@ export async function execute(
 
     if (!userProfileData.userData || !userProfileData.userData.discordHandle) {
       const verifyUrl = `https://alter-ego.fandom.com/wiki/Special:VerifyUser/${encodeURIComponent(canonicalFandomUsername)}?user=${encodeURIComponent(interaction.user.username)}&c=wb&ch=verify-me&useskin=fandomdesktop`;
-      const tutorialEmbed = new EmbedBuilder()
-        .setColor("#FFA500")
-        .setTitle("❓ HOW TO LINK YOUR FANDOM ACCOUNT")
-        .setDescription(
-          `**The alter "${canonicalFandomUsername}" hath not revealed one's Discord handle on the profile!**\n\n` +
-            `To link your Discord, follow these steps:\n\n` +
-            `1. Open the verification page: [Special:VerifyUser](${verifyUrl})\n` +
-            `2. Follow the instructions on that page to add/confirm your Discord handle.\n` +
-            `3. Once complete, return here and run \`/link\` again.\n\n` +
-            `If the page warns about a username mismatch, ensure you are logged into the correct Fandom account.`,
-        )
-        .setFooter({
-          text: "If you have set your Discord and still see this, double-check for typos or try again in a few minutes.",
-        });
 
       await interaction.reply({
-        embeds: [tutorialEmbed],
-        flags: MessageFlags.Ephemeral,
+        components: [
+          container("#FFA500").addTextDisplayComponents(
+            text(
+              `## ❓ HOW TO LINK YOUR FANDOM ACCOUNT\n**The alter "${canonicalFandomUsername}" hath not revealed one's Discord handle on the profile!**\n\nTo link your Discord, follow these steps:\n\n1. Open the verification page: [Special:VerifyUser](${verifyUrl})\n2. Follow the instructions on that page to add/confirm your Discord handle.\n3. Once complete, return here and run \`/link\` again.\n\nIf the page warns about a username mismatch, ensure you are logged into the correct Fandom account.\n\n-# If you have set your Discord and still see this, double-check for typos or try again in a few minutes.`,
+            ),
+          ),
+        ],
+        flags: V2_EPHEMERAL,
       });
       return;
     }
@@ -179,51 +171,19 @@ export async function execute(
       discordUserIdentifierToCompare.toLowerCase()
     ) {
       const verifyUrl = `https://alter-ego.fandom.com/wiki/Special:VerifyUser/${encodeURIComponent(canonicalFandomUsername)}?user=${encodeURIComponent(interaction.user.username)}&c=wb&ch=verify-me&useskin=fandomdesktop`;
-      const tutorialEmbed = new EmbedBuilder()
-        .setColor("#FFA500")
-        .setTitle("❓ DISCORD HANDLE MISMATCH")
-        .setDescription(
-          `**A mismatch in the Dirac sea!**\n\n` +
-            `The Discord handle on Fandom ("${fandomDiscordHandle}") doth not align with thy current Discord username ("${interaction.user.username}").\n\n` +
-            `To fix this, re-run verification using the Special page:\n\n` +
-            `1. Open: [Special:VerifyUser](${verifyUrl})\n` +
-            `2. Follow the instructions to set/confirm your Discord handle.\n` +
-            `3. Return here and run \`/link\` again.\n\n` +
-            `Make sure you are logged into the correct Fandom account for "${canonicalFandomUsername}".`,
-        )
-        .setFooter({
-          text: "If you have set your Discord and still see this, double-check for typos or try again in a few minutes.",
-        });
 
       await interaction.reply({
-        embeds: [tutorialEmbed],
-        flags: MessageFlags.Ephemeral,
+        components: [
+          container("#FFA500").addTextDisplayComponents(
+            text(
+              `## ❓ DISCORD HANDLE MISMATCH\n**A mismatch in the Dirac sea!**\n\nThe Discord handle on Fandom ("${fandomDiscordHandle}") doth not align with thy current Discord username ("${interaction.user.username}").\n\nTo fix this, re-run verification using the Special page:\n\n1. Open: [Special:VerifyUser](${verifyUrl})\n2. Follow the instructions to set/confirm your Discord handle.\n3. Return here and run \`/link\` again.\n\nMake sure you are logged into the correct Fandom account for "${canonicalFandomUsername}".\n\n-# If you have set your Discord and still see this, double-check for typos or try again in a few minutes.`,
+            ),
+          ),
+        ],
+        flags: V2_EPHEMERAL,
       });
       return;
     }
-
-    const confirmationEmbed = new EmbedBuilder()
-      .setColor("#FF6B35")
-      .setTitle("⚠️ LINKING CONFIRMATION")
-      .setDescription(
-        `**THOU ART ABOUT TO LINK THY DISCORD SOUL WITH THE FANDOM ALTER: ${canonicalFandomUsername}**`,
-      )
-      .addFields(
-        {
-          name: "🔒 PERMANENT ACTION",
-          value:
-            "**THIS LINKING IS ETERNAL AND CANNOT BE UNDONE WITHOUT ALTERMINISTRATOR INTERVENTION!**",
-          inline: false,
-        },
-        {
-          name: "📜 CONFIRMATION REQUIRED",
-          value:
-            "Make certain this is thy true will. Shouldst thou wish to proceed, click the button below to commence the linking ritual. The oracles shall commune with the Dirac sea and bind thee to thine alter.",
-          inline: false,
-        },
-      )
-      .setFooter({ text: `This confirmation will expire in 60 seconds.` })
-      .setTimestamp();
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -233,143 +193,109 @@ export async function execute(
     );
 
     const reply = await interaction.reply({
-      embeds: [confirmationEmbed],
-      components: [row],
-      flags: MessageFlags.Ephemeral,
+      components: [
+        container("#FF6B35")
+          .addTextDisplayComponents(
+            text(
+              `## ⚠️ LINKING CONFIRMATION\n**THOU ART ABOUT TO LINK THY DISCORD SOUL WITH THE FANDOM ALTER: ${canonicalFandomUsername}**\n\n**🔒 PERMANENT ACTION**\n**THIS LINKING IS ETERNAL AND CANNOT BE UNDONE WITHOUT ALTERMINISTRATOR INTERVENTION!**\n**📜 CONFIRMATION REQUIRED**\nMake certain this is thy true will. Shouldst thou wish to proceed, click the button below to commence the linking ritual. The oracles shall commune with the Dirac sea and bind thee to thine alter.\n\n-# This confirmation will expire in 60 seconds.`,
+            ),
+          )
+          .addActionRowComponents(row),
+      ],
+      flags: V2_EPHEMERAL,
     });
 
-    try {
-      const collector = reply.createMessageComponentCollector({
-        componentType: ComponentType.Button,
-        time: 60000,
-      });
+    const collector = reply.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: 60000,
+    });
 
-      let confirmed = false;
+    let confirmed = false;
 
-      // In case I want to move this to non ephemeral later
-      collector.on("collect", async (i) => {
-        if (i.user.id !== interaction.user.id) {
-          await i.reply({
-            content: "You cannot confirm another's linking ritual.",
-            flags: MessageFlags.Ephemeral,
-          });
-          return;
-        }
-        confirmed = true;
-        collector.stop();
+    // In case I want to move this to non ephemeral later
+    collector.on("collect", async (i) => {
+      if (i.user.id !== interaction.user.id) {
+        await i.reply({
+          content: "You cannot confirm another's linking ritual.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      confirmed = true;
+      collector.stop();
 
-        const { grantedRoleNames, failedRoleNames } =
-          await FandomRoleManager.manageFandomRoles(
-            member,
-            fandomGroups,
-            interaction.guild,
-          );
-        await LinkLogger.addLink(
-          interaction.user.id,
-          interaction.user.tag,
-          canonicalFandomUsername,
-          fandomUserId,
-        );
-
-        const topContributorResult =
-          await TopContributorsManager.manageTopContributorRole(
-            member,
-            canonicalFandomUsername,
-          );
-
-        const successEmbed = new EmbedBuilder()
-          .setColor(failedRoleNames.length > 0 ? "#FFA500" : "#00FF00")
-          .setTitle("🔗 ALTER AND SOUL INTERTWINED!")
-          .setDescription(
-            `**PRAISE BE! Thy Discord presence, ${interaction.user.tag}, is now divinely linked with thy Fandom alter: ${canonicalFandomUsername}!**`,
-          );
-
-        let allGrantedRoles = [...grantedRoleNames];
-        if (topContributorResult.roleGranted) {
-          const topRole = interaction.guild?.roles.cache.get(
-            TOP_CONTRIBUTORS_ROLE_ID,
-          );
-          if (topRole) allGrantedRoles.push(topRole.name);
-        }
-
-        const roleMentions = FandomRoleManager.createRoleMentions(
-          allGrantedRoles,
+      const { grantedRoleNames, failedRoleNames } =
+        await FandomRoleManager.manageFandomRoles(
+          member,
+          fandomGroups,
           interaction.guild,
         );
+      await LinkLogger.addLink(
+        interaction.user.id,
+        interaction.user.tag,
+        canonicalFandomUsername,
+        fandomUserId,
+      );
 
-        if (roleMentions) {
-          successEmbed.addFields({
-            name: "ROLES BESTOWED",
-            value: roleMentions,
-          });
-        } else {
-          successEmbed.addFields({
-            name: "ROLES STATUS",
-            value:
-              "No specific Fandom staff roles were applicable at this time.",
-          });
-        }
+      const topContributorResult =
+        await TopContributorsManager.manageTopContributorRole(
+          member,
+          canonicalFandomUsername,
+        );
 
-        if (topContributorResult.rank) {
-          successEmbed.addFields({
-            name: "TOP CONTRIBUTOR STATUS",
-            value: `**🏆 CONGRATULATIONS! Rank #${topContributorResult.rank}** in current week's top contributors!`,
-          });
-        }
+      let body = `## 🔗 ALTER AND SOUL INTERTWINED!\n**PRAISE BE! Thy Discord presence, ${interaction.user.tag}, is now divinely linked with thy Fandom alter: ${canonicalFandomUsername}!**`;
 
-        if (failedRoleNames.length > 0) {
-          successEmbed.addFields({
-            name: "ROLE GRANTING ISSUES",
-            value: `Failed to grant: ${failedRoleNames.map((rName) => `\`${rName}\``).join(", ")}.`,
-          });
-        }
+      let allGrantedRoles = [...grantedRoleNames];
+      if (topContributorResult.roleGranted) {
+        const topRole = interaction.guild?.roles.cache.get(
+          TOP_CONTRIBUTORS_ROLE_ID,
+        );
+        if (topRole) allGrantedRoles.push(topRole.name);
+      }
 
-        await i.update({
-          embeds: [successEmbed],
-          components: [],
+      const roleMentions = FandomRoleManager.createRoleMentions(
+        allGrantedRoles,
+        interaction.guild,
+      );
+
+      if (roleMentions) {
+        body += `\n\n**ROLES BESTOWED**\n${roleMentions}`;
+      } else {
+        body += `\n\n**ROLES STATUS**\nNo specific Fandom staff roles were applicable at this time.`;
+      }
+
+      if (topContributorResult.rank) {
+        body += `\n**TOP CONTRIBUTOR STATUS**\n**🏆 CONGRATULATIONS! Rank #${topContributorResult.rank}** in current week's top contributors!`;
+      }
+
+      if (failedRoleNames.length > 0) {
+        body += `\n**ROLE GRANTING ISSUES**\nFailed to grant: ${failedRoleNames.map((rName) => `\`${rName}\``).join(", ")}.`;
+      }
+
+      await i.update({
+        components: [
+          container(
+            failedRoleNames.length > 0 ? "#FFA500" : "#00FF00",
+          ).addTextDisplayComponents(text(body)),
+        ],
+        flags: V2,
+      });
+    });
+
+    collector.on("end", async () => {
+      if (!confirmed) {
+        await interaction.editReply({
+          components: [
+            container("#FF0000").addTextDisplayComponents(
+              text(
+                `## ⏰ LINKING RITUAL EXPIRED\n**THE LINKING CONFIRMATION HAS EXPIRED. NO CHANGES WERE MADE.**\n\n**TO RETRY**\nRun the \`/link\` command again to restart the linking process.`,
+              ),
+            ),
+          ],
+          flags: V2,
         });
-      });
-
-      collector.on("end", async () => {
-        if (!confirmed) {
-          const timeoutEmbed = new EmbedBuilder()
-            .setColor("#FF0000")
-            .setTitle("⏰ LINKING RITUAL EXPIRED")
-            .setDescription(
-              "**THE LINKING CONFIRMATION HAS EXPIRED. NO CHANGES WERE MADE.**",
-            )
-            .addFields({
-              name: "TO RETRY",
-              value:
-                "Run the `/link` command again to restart the linking process.",
-              inline: false,
-            });
-
-          await interaction.editReply({
-            embeds: [timeoutEmbed],
-            components: [],
-          });
-        }
-      });
-    } catch (error) {
-      const timeoutEmbed = new EmbedBuilder()
-        .setColor("#FF0000")
-        .setTitle("⏰ LINKING RITUAL EXPIRED")
-        .setDescription(
-          "**THE LINKING CONFIRMATION HAS EXPIRED. NO CHANGES WERE MADE.**",
-        )
-        .addFields({
-          name: "TO RETRY",
-          value:
-            "Run the `/link` command again to restart the linking process.",
-          inline: false,
-        });
-
-      await interaction.editReply({
-        embeds: [timeoutEmbed],
-        components: [],
-      });
-    }
+      }
+    });
   } catch (error) {
     console.error("Error during Fandom account linking:", error);
     await interaction.reply({

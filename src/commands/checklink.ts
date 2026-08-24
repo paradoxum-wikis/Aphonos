@@ -1,14 +1,13 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
-  GuildMember,
   MessageFlags,
 } from "discord.js";
 import { LinkLogger } from "../utils/linkLogger.js";
 import { TOP_CONTRIBUTORS_ROLE_ID } from "../utils/roleConstants.js";
 import { TopContributorsManager } from "../utils/topContributors.js";
 import { FandomRoleManager } from "../utils/fandomRoleManager.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 interface FandomUserQueryUser {
   userid: number;
@@ -66,20 +65,16 @@ export async function execute(
     const existingLink = await LinkLogger.getLinkByDiscordId(targetUser.id);
 
     if (!existingLink) {
-      const embed = new EmbedBuilder()
-        .setColor("#808080")
-        .setTitle("🔍 LINK STATUS CHECK")
-        .setDescription(
-          `**${targetUser.tag} is not bound to any Fandom alter!**`,
-        )
-        .addFields({
-          name: "STATUS",
-          value: "Unlinked",
-          inline: true,
-        })
-        .setTimestamp();
-
-      await interaction.reply({ embeds: [embed] });
+      await interaction.reply({
+        components: [
+          container("#808080").addTextDisplayComponents(
+            text(
+              `## 🔍 LINK STATUS CHECK\n**${targetUser.tag} is not bound to any Fandom alter!**\n\n**STATUS**\nUnlinked`,
+            ),
+          ),
+        ],
+        flags: V2,
+      });
       return;
     }
 
@@ -169,31 +164,10 @@ export async function execute(
       rolesSynced = true;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(fandomDataStatus === "Active" ? "#00FF00" : "#FFA500")
-      .setTitle("🔍 LINK STATUS CHECK & SYNC")
-      .setDescription(
-        `**${targetUser.tag} is bound to the Fandom alter: ${existingLink.fandomUsername}**`,
-      )
-      .addFields(
-        {
-          name: "DISCORD USER",
-          value: `${targetUser.tag}`,
-          inline: true,
-        },
-        {
-          name: "FANDOM ALTER",
-          value: `${existingLink.fandomUsername}`,
-          inline: true,
-        },
-        {
-          name: "LINKED ON",
-          value: `<t:${Math.floor(
-            new Date(existingLink.linkedAt).getTime() / 1000,
-          )}:F>`,
-          inline: true,
-        },
-      );
+    let color = fandomDataStatus === "Active" ? "#00FF00" : "#FFA500";
+    let body = `## 🔍 LINK STATUS CHECK & SYNC\n**${targetUser.tag} is bound to the Fandom alter: ${existingLink.fandomUsername}**\n\n**DISCORD USER**\n${targetUser.tag}\n**FANDOM ALTER**\n${existingLink.fandomUsername}\n**LINKED ON**\n<t:${Math.floor(
+      new Date(existingLink.linkedAt).getTime() / 1000,
+    )}:F>`;
 
     if (rolesSynced) {
       let allGrantedRoles = [...grantedRoleNames];
@@ -224,48 +198,34 @@ export async function execute(
 
       console.log(`[CHECKLINK] Role mentions generated: ${roleMentions}`);
 
-      embed.addFields({ name: "ROLES SYNCHRONIZED", value: roleMentions });
+      body += `\n**ROLES SYNCHRONIZED**\n${roleMentions}`;
 
       if (topContributorResult.rank) {
-        embed.addFields({
-          name: "TOP CONTRIBUTOR STATUS",
-          value: `**🏆 Rank #${topContributorResult.rank}** in current week's top contributors!`,
-        });
+        body += `\n**TOP CONTRIBUTOR STATUS**\n**🏆 Rank #${topContributorResult.rank}** in current week's top contributors!`;
       } else if (topContributorResult.roleRemoved) {
-        embed.addFields({
-          name: "TOP CONTRIBUTOR STATUS",
-          value: "No longer in top 5 contributors - role removed.",
-        });
+        body += `\n**TOP CONTRIBUTOR STATUS**\nNo longer in top 5 contributors - role removed.`;
       }
 
       if (failedRoleNames.length > 0) {
-        embed.addFields({
-          name: "ROLE SYNC ISSUES",
-          value: `Failed to grant: ${failedRoleNames
-            .map((rName) => `\`${rName}\``)
-            .join(", ")}.`,
-        });
-        embed.setColor("#FFA500");
+        body += `\n**ROLE SYNC ISSUES**\nFailed to grant: ${failedRoleNames
+          .map((rName) => `\`${rName}\``)
+          .join(", ")}.`;
+        color = "#FFA500";
       }
 
       if (fandomGroups.length > 0) {
-        embed.addFields({
-          name: "FANDOM GROUPS",
-          value: fandomGroups.map((group) => `\`${group}\``).join(", "),
-        });
+        body += `\n**FANDOM GROUPS**\n${fandomGroups.map((group) => `\`${group}\``).join(", ")}`;
       }
     }
 
     if (fandomDataStatus !== "Active") {
-      embed.addFields({
-        name: "⚠️ WARNING",
-        value: "The linked Fandom account could not be found.",
-      });
+      body += `\n**⚠️ WARNING**\nThe linked Fandom account could not be found.`;
     }
 
-    embed.setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [container(color).addTextDisplayComponents(text(body))],
+      flags: V2,
+    });
   } catch (error) {
     console.error("Error during link check:", error);
     await interaction.reply({

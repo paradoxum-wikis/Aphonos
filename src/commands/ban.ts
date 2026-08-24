@@ -2,10 +2,10 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   GuildMember,
-  EmbedBuilder,
   MessageFlags,
 } from "discord.js";
 import { ModerationLogger } from "../utils/moderationLogger.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("ban")
@@ -37,16 +37,16 @@ export async function execute(
     typeof targetUserRaw === "string" &&
     ["t7ru", "380694434980954114"].includes(targetUserRaw.toLowerCase())
   ) {
-    const embed = new EmbedBuilder()
-      .setColor("#FFC0CB")
-      .setTitle("🐾 ETERNAL BANISHMENT OF FURRIES")
-      .setDescription(
-        `**All furries have been cast into the eternal void!**\n\n<@380694434980954114> hath been included among the banished.\n\nMay this serve as a warning to all who would embrace the furry path!`,
-      )
-      .setFooter({ text: "We have zero tolerance for furries." })
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container("#FFC0CB").addTextDisplayComponents(
+          text(
+            `## 🐾 ETERNAL BANISHMENT OF FURRIES\n**All furries have been cast into the eternal void!**\n\n<@380694434980954114> hath been included among the banished.\n\nMay this serve as a warning to all who would embrace the furry path!\n\n-# We have zero tolerance for furries.`,
+          ),
+        ),
+      ],
+      flags: V2,
+    });
     return;
   }
 
@@ -79,29 +79,16 @@ export async function execute(
       guildId: interaction.guild.id,
     });
 
-    const embed = new EmbedBuilder()
-      .setColor("#8B0000")
-      .setTitle("🔥 ETERNAL JUDGEMENT DECREED")
-      .setDescription(
-        `**${targetUser} hath been cast into the void for heretical defiance!**`,
-      )
-      .addFields(
-        {
-          name: "EXECUTOR OF DIVINE WILL",
-          value: `${executor.user.tag}`,
-          inline: true,
-        },
-        { name: "ACTION ID", value: `${entryId}`, inline: true },
-        { name: "REASON FOR ETERNAL PUNISHMENT", value: reason, inline: false },
-        {
-          name: "SACRED DECREE",
-          value: "Those who defy Alteruism shall know eternal exile",
-          inline: false,
-        },
-      )
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container("#8B0000").addTextDisplayComponents(
+          text(
+            `## 🔥 ETERNAL JUDGEMENT DECREED\n**${targetUser} hath been cast into the void for heretical defiance!**\n\n**EXECUTOR OF DIVINE WILL**\n${executor.user.tag}\n**ACTION ID**\n${entryId}\n**REASON FOR ETERNAL PUNISHMENT**\n${reason}\n**SACRED DECREE**\nThose who defy Alteruism shall know eternal exile`,
+          ),
+        ),
+      ],
+      flags: V2,
+    });
   } catch (error) {
     await interaction.reply({
       content:

@@ -1,8 +1,5 @@
-import {
-  ChatInputCommandInteraction,
-  SlashCommandBuilder,
-  EmbedBuilder,
-} from "discord.js";
+import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 interface GitHubCommit {
   sha: string;
@@ -41,38 +38,35 @@ export async function execute(
     console.error("Error fetching bot info:", error);
   }
 
-  const embed = new EmbedBuilder()
-    .setColor("#9932CC")
-    .setTitle("ℹ️ KNOWLEDGE OF APHONOS")
-    .setDescription("**Behold the divine information of thy sacred enforcer!**")
-    .addFields(
-      {
-        name: "📚 DOCUMENTATION",
-        value:
-          "[Alterpedia Help Page](https://alter-ego.fandom.com/wiki/Help:ALTERSHAPER)",
-        inline: false,
-      },
-      {
-        name: "🔗 SOURCE CODE",
-        value:
-          "[GitHub Repository](https://github.com/Paradoxum-Wikis/ALTERSHAPER-Bot)",
-        inline: false,
-      },
-      {
-        name: "📝 LATEST UPDATE",
-        value: commitInfo,
-        inline: false,
-      },
-      {
-        name: "📊 CURRENT STATUS",
-        value: `**Uptime:** <t:${Math.floor((Date.now() - process.uptime() * 1000) / 1000)}:R>\n**Servers:** ${interaction.client.guilds.cache.size}\n**Users in this server:** ${interaction.guild?.memberCount}`,
-        inline: false,
-      },
-    )
-    .setFooter({
-      text: "Aphonos stands eternal, guardian of Alteruism and enforcer of righteous order!",
-    })
-    .setTimestamp();
-
-  await interaction.reply({ embeds: [embed] });
+  await interaction.reply({
+    components: [
+      container("#9932CC")
+        .addTextDisplayComponents(
+          text(
+            "## ℹ️ KNOWLEDGE OF APHONOS\n**Behold the divine information of thy sacred enforcer!**",
+          ),
+        )
+        .addSeparatorComponents((s) => s)
+        .addTextDisplayComponents(
+          text(
+            "**📚 DOCUMENTATION**\n[Alterpedia Help Page](https://alter-ego.fandom.com/wiki/Help:ALTERSHAPER)",
+          ),
+        )
+        .addSeparatorComponents((s) => s)
+        .addTextDisplayComponents(
+          text(
+            "**🔗 SOURCE CODE**\n[GitHub Repository](https://github.com/Paradoxum-Wikis/ALTERSHAPER-Bot)",
+          ),
+        )
+        .addSeparatorComponents((s) => s)
+        .addTextDisplayComponents(text(`**📝 LATEST UPDATE**\n${commitInfo}`))
+        .addSeparatorComponents((s) => s)
+        .addTextDisplayComponents(
+          text(
+            `**📊 CURRENT STATUS**\n**Uptime:** <t:${Math.floor((Date.now() - process.uptime() * 1000) / 1000)}:R>\n**Servers:** ${interaction.client.guilds.cache.size}\n**Users in this server:** ${interaction.guild?.memberCount}\n\n-# Aphonos stands eternal, guardian of Alteruism and enforcer of righteous order!`,
+          ),
+        ),
+    ],
+    flags: V2,
+  });
 }

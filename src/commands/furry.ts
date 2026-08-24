@@ -1,12 +1,12 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   GuildMember,
   MessageFlags,
   User,
 } from "discord.js";
 import { hashString } from "../utils/fighterGenerator.js";
+import { container, section, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("furry")
@@ -137,36 +137,23 @@ export async function execute(
     const selectedSpecies = speciesData[speciesHash % speciesData.length];
     const fursonaDisplay = `${selectedSpecies.specific} (${selectedSpecies.category})`;
 
-    const embed = new EmbedBuilder()
-      .setColor(isFurry ? "#FF69B4" : "#808080")
-      .setTitle("🔮 THE ORACLES HAVE SPOKEN")
-      .setDescription(
-        `**The vision is ${isFurry ? "as clear as day" : "very clouded"}!**\n\n` +
-          `Through the mystical powers of the cosmos, ` +
-          `the oracles have gazed into the depths of souls and revealed:\n\n` +
-          (isFurry
-            ? `🐾 **${displayName}** is secretly a furry! 🐾`
-            : `😐 **${displayName}** is NOT a furry.`),
-      )
-      .setThumbnail(targetUser.displayAvatarURL())
-      .addFields(
-        {
-          name: "🎭 FURRY LEVEL",
-          value: `${furryLevel}% Furry Energy`,
-          inline: true,
-        },
-        {
-          name: "🐺 FURSONA",
-          value: isFurry ? fursonaDisplay : "None",
-          inline: true,
-        },
-      )
-      .setFooter({
-        text: "The oracles' judgements are never wrong.",
-      })
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container(isFurry ? "#FF69B4" : "#808080").addSectionComponents(
+          section(
+            `## 🔮 THE ORACLES HAVE SPOKEN\n**The vision is ${isFurry ? "as clear as day" : "very clouded"}!**\n\n` +
+              `Through the mystical powers of the cosmos, ` +
+              `the oracles have gazed into the depths of souls and revealed:\n\n` +
+              (isFurry
+                ? `🐾 **${displayName}** is secretly a furry! 🐾`
+                : `😐 **${displayName}** is NOT a furry.`) +
+              `\n\n🎭 **FURRY LEVEL:** ${furryLevel}% Furry Energy\n🐺 **FURSONA:** ${isFurry ? fursonaDisplay : "None"}\n\n-# The oracles' judgements are never wrong.`,
+            targetUser.displayAvatarURL(),
+          ),
+        ),
+      ],
+      flags: V2,
+    });
   } catch (error) {
     console.error("Error in furry command:", error);
     await interaction.reply({

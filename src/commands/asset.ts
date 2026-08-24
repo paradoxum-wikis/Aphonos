@@ -1,8 +1,5 @@
-import {
-  ChatInputCommandInteraction,
-  SlashCommandBuilder,
-  EmbedBuilder,
-} from "discord.js";
+import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 function buildFormData(assetId: string): { body: string; boundary: string } {
   const boundary =
@@ -65,16 +62,16 @@ export async function execute(
   try {
     const downloadUrl = await getRobloxAssetDownloadLink(assetId);
 
-    const embed = new EmbedBuilder()
-      .setColor("#D99E82")
-      .setTitle("📦 ASSET RETRIEVED")
-      .setDescription(
-        `Asset **${assetId}** is ready.\n[Click here to download the file](${downloadUrl}).`,
-      )
-      .setFooter({ text: "API is experimental, it may break at any time." })
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({
+      components: [
+        container("#D99E82").addTextDisplayComponents(
+          text(
+            `## 📦 ASSET RETRIEVED\nAsset **${assetId}** is ready.\n[Click here to download the file](${downloadUrl}).\n\n-# API is experimental, it may break at any time.`,
+          ),
+        ),
+      ],
+      flags: V2,
+    });
   } catch (error) {
     console.error("Failed to fetch Roblox asset:", error);
     await interaction.editReply({

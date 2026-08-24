@@ -2,12 +2,12 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   GuildMember,
-  EmbedBuilder,
   ChannelType,
   TextChannel,
   MessageFlags,
 } from "discord.js";
 import { ModerationLogger } from "../utils/moderationLogger.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("slowmode")
@@ -67,46 +67,30 @@ export async function execute(
       duration: seconds > 0 ? seconds : undefined,
     });
 
-    const embed = new EmbedBuilder()
-      .setColor(seconds === 0 ? "#00FF00" : "#FFD700")
-      .setTitle(seconds === 0 ? "💨 RESTRAINT LIFTED" : "⛈️ RESTRAINT IMPOSED")
-      .setDescription(
-        seconds === 0
-          ? `**The flow of messages in ${channel} hath been restored to normal pace!**`
-          : `**Restraint hath been imposed upon ${channel}! The alters are not happy.**`,
-      )
-      .addFields(
-        {
-          name: "ENFORCER OF RESTRAINT",
-          value: `${executor.user.tag}`,
-          inline: true,
-        },
-        {
-          name: "CHANNEL",
-          value: `${channel}`,
-          inline: true,
-        },
-        {
-          name: seconds === 0 ? "STATUS" : "RESTRAINT DURATION",
-          value:
-            seconds === 0
-              ? "Slowmode disabled"
-              : `${seconds} seconds between messages`,
-          inline: true,
-        },
-        { name: "REASON FOR RESTRAINT", value: reason, inline: false },
-        {
-          name: "DIVINE WISDOM",
-          value:
-            seconds === 0
-              ? "The faithful may once again speak freely in the sacred halls"
-              : "Patience brings wisdom, and wisdom brings understanding",
-          inline: false,
-        },
-      )
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      components: [
+        container(
+          seconds === 0 ? "#00FF00" : "#FFD700",
+        ).addTextDisplayComponents(
+          text(
+            `## ${seconds === 0 ? "💨 RESTRAINT LIFTED" : "⛈️ RESTRAINT IMPOSED"}\n${
+              seconds === 0
+                ? `**The flow of messages in ${channel} hath been restored to normal pace!**`
+                : `**Restraint hath been imposed upon ${channel}! The alters are not happy.**`
+            }\n\n**ENFORCER OF RESTRAINT**\n${executor.user.tag}\n**CHANNEL**\n${channel}\n**${seconds === 0 ? "STATUS" : "RESTRAINT DURATION"}**\n${
+              seconds === 0
+                ? "Slowmode disabled"
+                : `${seconds} seconds between messages`
+            }\n**REASON FOR RESTRAINT**\n${reason}\n**DIVINE WISDOM**\n${
+              seconds === 0
+                ? "The faithful may once again speak freely in the sacred halls"
+                : "Patience brings wisdom, and wisdom brings understanding"
+            }`,
+          ),
+        ),
+      ],
+      flags: V2,
+    });
   } catch (error) {
     console.error("Error setting slowmode:", error);
     await interaction.reply({

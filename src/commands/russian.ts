@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   AttachmentBuilder,
   GuildMember,
   User,
@@ -11,6 +10,7 @@ import {
   ComponentType,
   MessageFlags,
 } from "discord.js";
+import { container, gallery, section, text, V2 } from "../utils/v2.js";
 import { createCanvas, loadImage, Image } from "@napi-rs/canvas";
 import path from "path";
 import { RussianStatsManager } from "../utils/russianStatsManager.js";
@@ -31,19 +31,6 @@ async function handleConsentPhase(
   inviter: User,
   target: User,
 ): Promise<boolean> {
-  const consentEmbed = new EmbedBuilder()
-    .setColor("#FF0000")
-    .setTitle("🔫 RUSSIAN ROULETTE CHALLENGE")
-    .setDescription(
-      `**${inviter} has challenged ${target} to Russian Roulette!**\n\n` +
-        `The stakes are high. One bullet, six chambers.\n` +
-        `Both players must accept to start the game.\n` +
-        `You have **15 seconds** to respond.`,
-    )
-    .setFooter({
-      text: "Do you feel lucky?",
-    });
-
   const acceptButton = new ButtonBuilder()
     .setCustomId("accept_game")
     .setLabel("✅ Accept Challenge")
@@ -60,8 +47,17 @@ async function handleConsentPhase(
   );
 
   await interaction.reply({
-    embeds: [consentEmbed],
-    components: [row],
+    components: [
+      container("#FF0000")
+        .addTextDisplayComponents(
+          text(
+            `## RUSSIAN ROULETTE CHALLENGE\n**${inviter}** has challenged **${target}**!\n\nOne bullet, six chambers. Both must accept.\nYou have **15 seconds**.\n\n-# Do you feel lucky?`,
+          ),
+        )
+        .addActionRowComponents(row),
+    ],
+    allowedMentions: { users: [inviter.id, target.id] },
+    flags: V2,
   });
 
   const acceptedUsers = new Set<string>();
@@ -302,9 +298,12 @@ export async function execute(
   if (!consentGiven) {
     LockManager.releaseLock(interaction.guildId!, "russian");
     await interaction.editReply({
-      content: "**Game cancelled! One or both players did not accept.**",
-      embeds: [],
-      components: [],
+      components: [
+        container("#8B0000").addTextDisplayComponents(
+          text("**Game cancelled! One or both players did not accept.**"),
+        ),
+      ],
+      flags: V2,
     });
     return;
   }
@@ -422,17 +421,6 @@ export async function execute(
       name: "russian.png",
     });
 
-    const embed = new EmbedBuilder()
-      .setColor(filter === "red" ? "#FF0000" : "#000000")
-      .setTitle("🔫 RUSSIAN ROULETTE")
-      .setDescription(
-        `**Turn:** ${currentTurnUser}\n` +
-          `**Opponent:** ${opponentUser}\n` +
-          `**Chamber:** ${currentSlot + 1}/6\n\n` +
-          `${message}`,
-      )
-      .setImage("attachment://russian.png");
-
     const shootButton = new ButtonBuilder()
       .setCustomId("shoot")
       .setLabel("💥 Shoot")
@@ -458,10 +446,20 @@ export async function execute(
     );
 
     await interaction.editReply({
-      content: null,
-      embeds: [embed],
+      components: [
+        container(filter === "red" ? "#FF0000" : "#000000")
+          .addSectionComponents(
+            section(
+              `## RUSSIAN ROULETTE\n**Turn:** ${currentTurnUser}\n**Opponent:** ${opponentUser}\n**Chamber:** ${currentSlot + 1}/6`,
+              currentTurnUser.displayAvatarURL({ size: 256, extension: "png" }),
+            ),
+          )
+          .addMediaGalleryComponents(gallery("attachment://russian.png"))
+          .addTextDisplayComponents(text(message))
+          .addActionRowComponents(row),
+      ],
       files: [attachment],
-      components: [row],
+      flags: V2,
     });
   };
 

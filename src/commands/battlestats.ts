@@ -1,14 +1,31 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   MessageFlags,
 } from "discord.js";
 import { BattleStatsManager } from "../utils/battleStatsManager.js";
+import { container, section, text, V2 } from "../utils/v2.js";
 
 function clampLimit(value: number, max: number): number {
   if (!Number.isFinite(value)) return 10;
   return Math.max(1, Math.min(max, value));
+}
+
+function lastAt(iso?: string): string {
+  if (!iso) return "Never";
+  return `<t:${Math.floor(new Date(iso).getTime() / 1000)}:R>`;
+}
+
+function battleMd(
+  heading: string,
+  wins: number,
+  losses: number,
+  wr: number,
+  ws: number,
+  total: number,
+  last: string,
+): string {
+  return `**${heading}**\n🏆 **Wins:** ${wins} · 💀 **Losses:** ${losses} · 📊 **WR:** ${wr}%\n⭐ **WS:** ${ws} · ⚔️ **Total:** ${total}\n📅 **Last:** ${last} · 🎯 **Ratio:** ${wins}W-${losses}L`;
 }
 
 export const data = new SlashCommandBuilder()
@@ -121,88 +138,41 @@ export async function execute(
           return;
         }
 
-        const embed = new EmbedBuilder()
-          .setColor("#4B0082")
-          .setTitle("⚔️ WARRIOR BATTLE RECORD")
-          .setDescription(`Battle statistics for **${targetUser.tag}**`)
-          .setThumbnail(targetUser.displayAvatarURL())
-          .setTimestamp();
+        const header = `## ⚔️ WARRIOR BATTLE RECORD\nBattle statistics for **${targetUser.tag}**`;
+        const avatar = targetUser.displayAvatarURL();
+        const components: ReturnType<typeof container>[] = [];
 
         if (mode === "normal" || mode === "all") {
-          embed.addFields(
-            { name: "📊 **NORMAL BATTLES**", value: "\u200B", inline: false },
-            { name: "🏆 Wins", value: stats.wins.toString(), inline: true },
-            { name: "💀 Losses", value: stats.losses.toString(), inline: true },
-            { name: "📊 Win Rate", value: `${stats.winRate}%`, inline: true },
-            {
-              name: "⭐ Weighted Score",
-              value: `${stats.weightedScore}`,
-              inline: true,
-            },
-            {
-              name: "⚔️ Total Battles",
-              value: stats.totalBattles.toString(),
-              inline: true,
-            },
-            {
-              name: "📅 Last Battle",
-              value: stats.lastCasualBattleAt
-                ? `<t:${Math.floor(new Date(stats.lastCasualBattleAt).getTime() / 1000)}:R>`
-                : "Never",
-              inline: true,
-            },
-            {
-              name: "🎯 Battle Ratio",
-              value: `${stats.wins}W-${stats.losses}L`,
-              inline: true,
-            },
+          components.push(
+            container("#4B0082").addSectionComponents(
+              section(
+                `${header}\n\n${battleMd("NORMAL BATTLES", stats.wins, stats.losses, stats.winRate, stats.weightedScore, stats.totalBattles, lastAt(stats.lastCasualBattleAt))}`,
+                avatar,
+              ),
+            ),
           );
         }
 
         if (mode === "ranked" || mode === "all") {
-          embed.addFields(
-            { name: "🏆 **RANKED BATTLES**", value: "\u200B", inline: false },
-            {
-              name: "🏆 Ranked Wins",
-              value: stats.rankedWins.toString(),
-              inline: true,
-            },
-            {
-              name: "💀 Ranked Losses",
-              value: stats.rankedLosses.toString(),
-              inline: true,
-            },
-            {
-              name: "📊 Ranked Win Rate",
-              value: `${stats.rankedWinRate}%`,
-              inline: true,
-            },
-            {
-              name: "⭐ Ranked Weighted Score",
-              value: `${stats.rankedWeightedScore}`,
-              inline: true,
-            },
-            {
-              name: "⚔️ Total Ranked",
-              value: stats.rankedTotalBattles.toString(),
-              inline: true,
-            },
-            {
-              name: "📅 Last Ranked",
-              value: stats.lastRankedBattleAt
-                ? `<t:${Math.floor(new Date(stats.lastRankedBattleAt).getTime() / 1000)}:R>`
-                : "Never",
-              inline: true,
-            },
-            {
-              name: "🎯 Ranked Ratio",
-              value: `${stats.rankedWins}W-${stats.rankedLosses}L`,
-              inline: true,
-            },
+          const ranked = battleMd(
+            "RANKED BATTLES",
+            stats.rankedWins,
+            stats.rankedLosses,
+            stats.rankedWinRate,
+            stats.rankedWeightedScore,
+            stats.rankedTotalBattles,
+            lastAt(stats.lastRankedBattleAt),
+          );
+          components.push(
+            mode === "ranked"
+              ? container("#4B0082").addSectionComponents(
+                  section(`${header}\n\n${ranked}`, avatar),
+                )
+              : container("#4B0082").addTextDisplayComponents(text(ranked)),
           );
         }
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({ components, flags: V2 });
         break;
       }
 
@@ -242,21 +212,18 @@ export async function execute(
           leaderboardText += `${medal} **${warrior.userTag}** - ${weightedScore.toFixed(2)} WS (${wins}W-${losses}L, ${winRate}% WR)\n`;
         }
 
-        const embed = new EmbedBuilder()
-          .setColor(isRanked ? "#FF6B35" : "#FFD700")
-          .setTitle(`🏆 ${isRanked ? "RANKED " : ""}HALL OF CHAMPIONS`)
-          .setDescription(
-            `**Top Warriors by ${isRanked ? "Ranked " : ""}Weighted Score**\n` +
-              `*Minimum ${isRanked ? "5" : "3"} battles required*\n` +
-              `*WS = Weighted Score, WR = Win Rate*\n\n` +
-              leaderboardText,
-          )
-          .setFooter({
-            text: `Fight your way to the top${isRanked ? " in ranked battles" : ""}!`,
-          })
-          .setTimestamp();
-
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({
+          components: [
+            container(
+              isRanked ? "#FF6B35" : "#FFD700",
+            ).addTextDisplayComponents(
+              text(
+                `## 🏆 ${isRanked ? "RANKED " : ""}HALL OF CHAMPIONS\n**Top Warriors by ${isRanked ? "Ranked " : ""}Weighted Score**\n*Minimum ${isRanked ? "5" : "3"} battles required*\n*WS = Weighted Score, WR = Win Rate*\n\n${leaderboardText}\n-# Fight your way to the top${isRanked ? " in ranked battles" : ""}!`,
+              ),
+            ),
+          ],
+          flags: V2,
+        });
         break;
       }
 
@@ -299,18 +266,16 @@ export async function execute(
           historyText += `${result} vs **${opponent}** ${battleType} (${battle.turns} turns) - ${date}\n`;
         }
 
-        const embed = new EmbedBuilder()
-          .setColor("#800080")
-          .setTitle(`📜 ${mode.toUpperCase()} BATTLE CHRONICLES`)
-          .setDescription(
-            `Recent ${mode === "all" ? "" : mode + " "}battle history for **${targetUser.tag}**\n\n` +
-              `${mode === "all" ? "🏆 = Ranked | ⚔️ = Normal\n\n" : ""}` +
-              historyText,
-          )
-          .setThumbnail(targetUser.displayAvatarURL())
-          .setTimestamp();
-
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({
+          components: [
+            container("#800080").addTextDisplayComponents(
+              text(
+                `## 📜 ${mode.toUpperCase()} BATTLE CHRONICLES\nRecent ${mode === "all" ? "" : mode + " "}battle history for **${targetUser.tag}**\n\n${mode === "all" ? "🏆 = Ranked | ⚔️ = Normal\n\n" : ""}${historyText}`,
+              ),
+            ),
+          ],
+          flags: V2,
+        });
         break;
       }
     }

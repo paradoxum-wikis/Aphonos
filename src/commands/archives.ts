@@ -1,14 +1,14 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
   MessageFlags,
 } from "discord.js";
-import { MessageLogger } from "../utils/messageLogger.js";
+import { MessageLogger, type PurgedMessage } from "../utils/messageLogger.js";
+import { container, text, V2, V2_EPHEMERAL } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("archives")
@@ -20,58 +20,21 @@ export const data = new SlashCommandBuilder()
       .setRequired(false),
   );
 
-function createEmbed(
-  messages: import("../utils/messageLogger.js").PurgedMessage[],
+function pageContainer(
+  messages: PurgedMessage[],
   currentPage: number,
   totalPages: number,
   actionId?: string,
-): EmbedBuilder {
-  const embed = new EmbedBuilder()
-    .setColor("#4169E1")
-    .setTitle("📚 SERAPHIC ARCHIVES OF PURGED MESSAGES")
-    .setDescription(
-      actionId
-        ? `**Messages from action ${actionId}**\n**Total archived:** ${messages.length}\n**Page ${currentPage + 1} of ${totalPages}**`
-        : `**All archived messages for this guild**\n**Total archived:** ${messages.length}\n**Page ${currentPage + 1} of ${totalPages}**`,
-    )
-    .setTimestamp();
+) {
+  const messagesPerPage = 5;
+  const startIndex = currentPage * messagesPerPage;
+  const pageMessages = messages.slice(startIndex, startIndex + messagesPerPage);
 
-  return embed;
-}
+  const header = actionId
+    ? `**Messages from action ${actionId}**\n**Total archived:** ${messages.length}\n**Page ${currentPage + 1} of ${totalPages}**`
+    : `**All archived messages for this guild**\n**Total archived:** ${messages.length}\n**Page ${currentPage + 1} of ${totalPages}**`;
 
-function createButtons(
-  currentPage: number,
-  totalPages: number,
-): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId("first")
-      .setLabel("⏮️ First")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(currentPage === 0),
-    new ButtonBuilder()
-      .setCustomId("previous")
-      .setLabel("◀️ Previous")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(currentPage === 0),
-    new ButtonBuilder()
-      .setCustomId("next")
-      .setLabel("Next ▶️")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(currentPage === totalPages - 1),
-    new ButtonBuilder()
-      .setCustomId("last")
-      .setLabel("Last ⏭️")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(currentPage === totalPages - 1),
-  );
-}
-
-function addMessagesToEmbed(
-  embed: EmbedBuilder,
-  messages: import("../utils/messageLogger.js").PurgedMessage[],
-): void {
-  for (const message of messages) {
+  const fields = pageMessages.map((message) => {
     const purgedDate = new Date(message.purgedAt).toLocaleDateString();
     const originalDate = new Date(message.timestamp).toLocaleDateString();
 
@@ -90,19 +53,50 @@ function addMessagesToEmbed(
       embedInfo = `\n**Embeds:** ${message.embeds.length} embed(s)`;
     }
 
-    embed.addFields({
-      name: `📜 Message by ${message.authorTag}`,
-      value: `**Content:** ${content || "[NO TEXT]"}${attachmentInfo}${embedInfo}\n**Channel:** <#${message.channelId}>\n**Original Date:** ${originalDate}\n**Purged Date:** ${purgedDate}\n**Purged By:** ${message.purgedBy}\n**Action ID:** ${message.purgeActionId}`,
-      inline: false,
-    });
-  }
-
-  embed.addFields({
-    name: "SACRED REMINDER",
-    value:
-      "These archives are for moderation purposes only. Please handle with discretion.",
-    inline: false,
+    return `**📜 Message by ${message.authorTag}**\n**Content:** ${content || "[NO TEXT]"}${attachmentInfo}${embedInfo}\n**Channel:** <#${message.channelId}>\n**Original Date:** ${originalDate}\n**Purged Date:** ${purgedDate}\n**Purged By:** ${message.purgedBy}\n**Action ID:** ${message.purgeActionId}`;
   });
+
+  const c = container("#4169E1").addTextDisplayComponents(
+    text(`## 📚 SERAPHIC ARCHIVES OF PURGED MESSAGES\n${header}`),
+  );
+  for (const f of fields) {
+    c.addSeparatorComponents((s) => s).addTextDisplayComponents(text(f));
+  }
+  c.addSeparatorComponents((s) => s).addTextDisplayComponents(
+    text(
+      "**SACRED REMINDER**\nThese archives are for moderation purposes only. Please handle with discretion.",
+    ),
+  );
+  return c;
+}
+
+function createButtons(
+  currentPage: number,
+  totalPages: number,
+  disabled = false,
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("first")
+      .setLabel("⏮️ First")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || currentPage === 0),
+    new ButtonBuilder()
+      .setCustomId("previous")
+      .setLabel("◀️ Previous")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || currentPage === 0),
+    new ButtonBuilder()
+      .setCustomId("next")
+      .setLabel("Next ▶️")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || currentPage === totalPages - 1),
+    new ButtonBuilder()
+      .setCustomId("last")
+      .setLabel("Last ⏭️")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || currentPage === totalPages - 1),
+  );
 }
 
 export async function execute(
@@ -152,27 +146,12 @@ export async function execute(
     const totalPages = Math.ceil(purgedMessages.length / messagesPerPage);
     let currentPage = 0;
 
-    const embed = createEmbed(
-      purgedMessages,
-      currentPage,
-      totalPages,
-      actionId,
-    );
-    const startIndex = currentPage * messagesPerPage;
-    const endIndex = Math.min(
-      startIndex + messagesPerPage,
-      purgedMessages.length,
-    );
-    const pageMessages = purgedMessages.slice(startIndex, endIndex);
-
-    addMessagesToEmbed(embed, pageMessages);
-
-    const buttons = createButtons(currentPage, totalPages);
-
     const response = await interaction.reply({
-      embeds: [embed],
-      components: totalPages > 1 ? [buttons] : [],
-      flags: MessageFlags.Ephemeral,
+      components: [
+        pageContainer(purgedMessages, currentPage, totalPages, actionId),
+        ...(totalPages > 1 ? [createButtons(currentPage, totalPages)] : []),
+      ],
+      flags: V2_EPHEMERAL,
     });
 
     if (totalPages > 1) {
@@ -205,58 +184,25 @@ export async function execute(
             break;
         }
 
-        const newEmbed = createEmbed(
-          purgedMessages,
-          currentPage,
-          totalPages,
-          actionId,
-        );
-        const newStartIndex = currentPage * messagesPerPage;
-        const newEndIndex = Math.min(
-          newStartIndex + messagesPerPage,
-          purgedMessages.length,
-        );
-        const newPageMessages = purgedMessages.slice(
-          newStartIndex,
-          newEndIndex,
-        );
-
-        addMessagesToEmbed(newEmbed, newPageMessages);
-
-        const newButtons = createButtons(currentPage, totalPages);
-
         await buttonInteraction.update({
-          embeds: [newEmbed],
-          components: [newButtons],
+          components: [
+            pageContainer(purgedMessages, currentPage, totalPages, actionId),
+            createButtons(currentPage, totalPages),
+          ],
+          flags: V2,
         });
       });
 
       collector.on("end", async () => {
-        const disabledButtons =
-          new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder()
-              .setCustomId("first")
-              .setLabel("⏮️ First")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(true),
-            new ButtonBuilder()
-              .setCustomId("previous")
-              .setLabel("◀️ Previous")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(true),
-            new ButtonBuilder()
-              .setCustomId("next")
-              .setLabel("Next ▶️")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(true),
-            new ButtonBuilder()
-              .setCustomId("last")
-              .setLabel("Last ⏭️")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(true),
-          );
-
-        response.edit({ components: [disabledButtons] }).catch(() => {});
+        response
+          .edit({
+            components: [
+              pageContainer(purgedMessages, currentPage, totalPages, actionId),
+              createButtons(currentPage, totalPages, true),
+            ],
+            flags: V2,
+          })
+          .catch(() => {});
       });
     }
   } catch (error) {

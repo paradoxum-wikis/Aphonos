@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   AttachmentBuilder,
   GuildMember,
   User,
@@ -10,7 +9,9 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
+  ContainerBuilder,
 } from "discord.js";
+import { container, gallery, section, text, V2 } from "../utils/v2.js";
 import { createCanvas, loadImage, Image } from "@napi-rs/canvas";
 import path from "path";
 import { BattleStatsManager } from "../utils/battleStatsManager.js";
@@ -21,10 +22,9 @@ import {
   createArcanaBattleHooks,
 } from "../utils/tourney/arcana.js";
 import {
-  ARCANA_EFFECT,
   ARCANA_FULL_NAME,
   arcanaAttachment,
-  arcanaImageUrl,
+  arcanaCard,
   type ArcanaArtId,
 } from "../utils/tourney/arcanaAssets.js";
 
@@ -233,6 +233,46 @@ export async function createBattleImage(
   }
 }
 
+export function battleCard(opts: {
+  color: string | number;
+  title: string;
+  intro: string;
+  f1: {
+    name: string;
+    hp: number;
+    maxHp: number;
+    attack: number;
+    defense: number;
+    speed: number;
+  };
+  f2: {
+    name: string;
+    hp: number;
+    maxHp: number;
+    attack: number;
+    defense: number;
+    speed: number;
+  };
+  f1Url: string;
+  f2Url: string;
+  image: string;
+  log: string;
+  footer: string;
+}): ContainerBuilder {
+  const line = (f: (typeof opts)["f1"], mark: string) =>
+    `${mark} **${f.name}**\n${f.hp}/${f.maxHp} HP\n${createHpBar(f.hp, f.maxHp)}\n${f.attack} ATK · ${f.defense} DEF · ${f.speed} SPD`;
+
+  return container(opts.color)
+    .addTextDisplayComponents(text(`## ${opts.title}\n${opts.intro}`))
+    .addSectionComponents(
+      section(line(opts.f1, "🔴"), opts.f1Url),
+      section(line(opts.f2, "🔵"), opts.f2Url),
+    )
+    .addMediaGalleryComponents(gallery(opts.image))
+    .addSeparatorComponents((s) => s)
+    .addTextDisplayComponents(text(`${opts.log}\n\n-# ${opts.footer}`));
+}
+
 async function handleConsentPhase(
   interaction: ChatInputCommandInteraction,
   fighter1User: User,
@@ -241,20 +281,6 @@ async function handleConsentPhase(
   console.log(`[CONSENT] Starting consent phase for ranked battle`);
   console.log(`[CONSENT] Fighter 1: ${fighter1User.tag} (${fighter1User.id})`);
   console.log(`[CONSENT] Fighter 2: ${fighter2User.tag} (${fighter2User.id})`);
-
-  const consentEmbed = new EmbedBuilder()
-    .setColor("#FF6B35")
-    .setTitle("⚔️ BATTLE CONSENT REQUIRED")
-    .setDescription(
-      `**${fighter1User} and ${fighter2User}**\n\n` +
-        `A **RANKED** deathbattle has been proposed!\n\n` +
-        `🏆 **This is a RANKED battle - results will affect your competitive rating!**\n\n` +
-        `Both fighters must consent to engage in combat.\n` +
-        `You have **15 seconds** to respond.`,
-    )
-    .setFooter({
-      text: "Glory awaits in the arena of Alteruism!",
-    });
 
   const acceptButton = new ButtonBuilder()
     .setCustomId("accept_battle")
@@ -273,9 +299,17 @@ async function handleConsentPhase(
 
   console.log(`[CONSENT] Sending consent embed with buttons`);
   await interaction.editReply({
-    content: `${fighter1User} ${fighter2User}`,
-    embeds: [consentEmbed],
-    components: [row],
+    components: [
+      container("#FF6B35")
+        .addTextDisplayComponents(
+          text(
+            `## BATTLE CONSENT REQUIRED\n${fighter1User} ${fighter2User}\n\nA **RANKED** deathbattle has been proposed!\n\n🏆 Results will affect competitive rating.\nBoth fighters must consent. **15 seconds.**\n\n-# Glory awaits in the arena of Alteruism!`,
+          ),
+        )
+        .addActionRowComponents(row),
+    ],
+    allowedMentions: { users: [fighter1User.id, fighter2User.id] },
+    flags: V2,
   });
 
   const acceptedUsers = new Set<string>();
@@ -501,19 +535,15 @@ export async function execute(
 
       if (!consentGiven) {
         console.log(`[DEATHBATTLE] Consent not given, cancelling battle`);
-        const cancelEmbed = new EmbedBuilder()
-          .setColor("#8B0000")
-          .setTitle("⚔️ RANKED BATTLE CANCELLED")
-          .setDescription(
-            `The **RANKED** battle has been cancelled.\n\n` +
-              `*The warriors have chosen not to engage in competitive combat at this time.*`,
-          )
-          .setFooter({ text: "🔓 Arena is now available for new battles." });
-
         await interaction.editReply({
-          content: "",
-          embeds: [cancelEmbed],
-          components: [],
+          components: [
+            container("#8B0000").addTextDisplayComponents(
+              text(
+                `## RANKED BATTLE CANCELLED\nThe **RANKED** battle has been cancelled.\n\n*The warriors have chosen not to engage in competitive combat at this time.*\n\n-# Arena is now available for new battles.`,
+              ),
+            ),
+          ],
+          flags: V2,
         });
         return;
       }
@@ -567,39 +597,34 @@ export async function execute(
     const realmName = getRealmName(imageResult.backgroundFileName);
     const firstMover =
       fighter1.speed >= fighter2.speed ? fighter1.name : fighter2.name;
-
-    const setupEmbed = new EmbedBuilder()
-      .setColor(isRanked ? "#FF6B35" : "#2E2B5F")
-      .setTitle(
-        `⚔️ THE ${realmName.toUpperCase()} HAVE DECLARED A ${isRanked ? "RANKED " : ""}DEATHBATTLE!`,
-      )
-      .setDescription(
-        `**Two warriors enter the sacred arena of combat!**\n\n` +
-          (isRanked
-            ? `🏆 **RANKED BATTLE** - Results will affect competitive ratings!\n⚖️ **Justice Arcana** - both fighters have 100% aura!\n\n`
-            : "") +
-          (arcanaChoice
-            ? `🃏 **${ARCANA_FULL_NAME[arcanaChoice]}** - ${ARCANA_EFFECT[arcanaChoice]}\n\n`
-            : "") +
-          `**${fighter1.name}** vs **${fighter2.name}**\n\n` +
-          `🏃 **${firstMover}** moves first with superior speed!\n\n` +
-          `**Fighter Stats:**\n` +
-          `🔴 **${fighter1.name}**: ${fighter1.maxHp} HP | ${fighter1.attack} ATK | ${fighter1.defense} DEF | ${fighter1.speed} SPD\n` +
-          `🔵 **${fighter2.name}**: ${fighter2.maxHp} HP | ${fighter2.attack} ATK | ${fighter2.defense} DEF | ${fighter2.speed} SPD\n\n` +
-          `💨 **Speed Advantage:** Higher speed grants +1% dodge chance per point difference\n` +
-          `⚔️ **Battle begins in 3 seconds...**`,
-      )
-      .setImage("attachment://deathbattle.png")
-      .setFooter({
-        text: `🔒 Arena locked - ${isRanked ? "RANKED " : ""}Battle in progress...`,
-      });
-    if (activeArcana) setupEmbed.setThumbnail(arcanaImageUrl(activeArcana));
+    const rankedTag = isRanked ? "RANKED " : "";
+    const f1Url = fighter1User.displayAvatarURL({
+      size: 256,
+      extension: "png",
+    });
+    const f2Url = fighter2User.displayAvatarURL({
+      size: 256,
+      extension: "png",
+    });
+    const setup = battleCard({
+      color: isRanked ? "#FF6B35" : "#2E2B5F",
+      title: `THE ${realmName.toUpperCase()} HAVE DECLARED A ${rankedTag}DEATHBATTLE!`,
+      intro:
+        (isRanked ? "🏆 **RANKED** — ratings on the line.\n" : "") +
+        `**${fighter1.name}** vs **${fighter2.name}**\n🏃 **${firstMover}** moves first.`,
+      f1: fighter1,
+      f2: fighter2,
+      f1Url,
+      f2Url,
+      image: "attachment://deathbattle.png",
+      log: "Battle begins in 3 seconds…",
+      footer: `Arena locked — ${rankedTag}battle in progress`,
+    });
 
     await interaction.editReply({
-      content: "",
-      embeds: [setupEmbed],
+      components: [setup, ...(activeArcana ? [arcanaCard(activeArcana)] : [])],
       files,
-      components: [],
+      flags: V2,
     });
 
     await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -613,27 +638,23 @@ export async function execute(
       turnDelayMs: 2000,
       hooks: createArcanaBattleHooks(activeArcana, arcanaLevel),
       onTurn: async ({ turn, fighter1: f1, fighter2: f2, battleLog }) => {
-        const progressEmbed = new EmbedBuilder()
-          .setColor(isRanked ? "#FF6B35" : "#35C2FF")
-          .setTitle(`⚔️ ${isRanked ? "RANKED " : ""}BATTLE IN PROGRESS`)
-          .setDescription(
-            `**Turn ${turn}** - The battle rages on!\n\n` +
-              `**Current HP:**\n` +
-              `🔴 **${f1.name}**: ${f1.hp}/${f1.maxHp} HP\n` +
-              `${createHpBar(f1.hp, f1.maxHp)}\n\n` +
-              `🔵 **${f2.name}**: ${f2.hp}/${f2.maxHp} HP\n` +
-              `${createHpBar(f2.hp, f2.maxHp)}\n\n` +
-              `**The Battle:**\n` +
-              battleLog.slice(-5).join("\n"),
-          )
-          .setImage("attachment://deathbattle.png")
-          .setFooter({
-            text: `🔒 Arena locked - ${isRanked ? "RANKED " : ""}Battle in progress...`,
-          });
+        const progress = battleCard({
+          color: isRanked ? "#FF6B35" : "#35C2FF",
+          title: `${rankedTag}BATTLE IN PROGRESS`,
+          intro: `**Turn ${turn}**`,
+          f1,
+          f2,
+          f1Url,
+          f2Url,
+          image: "attachment://deathbattle.png",
+          log: battleLog.slice(-5).join("\n"),
+          footer: `Arena locked — ${rankedTag}battle in progress`,
+        });
 
         await interaction.editReply({
-          embeds: [progressEmbed],
+          components: [progress],
           ...(replaceIntroFiles ? { files: [attachment] } : {}),
+          flags: V2,
         });
         replaceIntroFiles = false;
       },
@@ -672,44 +693,47 @@ export async function execute(
     const winnerStats = await BattleStatsManager.getUserStats(winner.user.id);
     const loserStats = await BattleStatsManager.getUserStats(loser.user.id);
 
-    const finalEmbed = new EmbedBuilder()
-      .setColor("#FFD700")
-      .setTitle(`🏆 THE ${isRanked ? "RANKED " : ""}DEATHBATTLE HAS CONCLUDED`)
-      .setDescription(
-        `**${winner.name}** emerges victorious after ${turn} turns!\n\n` +
-          (hitTurnCap
-            ? "**The heavens are satisfied. The battle has been forcefully stopped, the combatant with the lowest health has been executed!**\n\n"
-            : "") +
-          `**Final Results:**\n` +
-          `🏆 **Victor:** ${winner.name} (${winner.hp}/${winner.maxHp} HP)\n` +
-          `💀 **Defeated:** ${loser.name} (0/${loser.maxHp} HP)\n\n` +
-          `**Battle Conclusion:**\n` +
-          battleLog.slice(-3).join("\n") +
-          "\n\n" +
-          (isRanked
-            ? `**Updated Ranked Battle Records:**\n` +
-              `🏆 **${winner.name}:** ${winnerStats?.rankedWins || 1}W-${winnerStats?.rankedLosses || 0}L (${(winnerStats?.rankedWeightedScore || 0).toFixed(2)} WS)\n` +
-              `💀 **${loser.name}:** ${loserStats?.rankedWins || 0}W-${loserStats?.rankedLosses || 1}L (${(loserStats?.rankedWeightedScore || 0).toFixed(2)} WS)\n\n`
-            : "") +
-          `*The arena falls silent as ${winner.name} stands triumphant...*`,
-      )
-      .setImage("attachment://deathbattle-final.png")
-      .setFooter({
-        text: `${isRanked ? "Ranked " : ""}Battle lasted ${turn} turns | 🔓 Arena is now available for new battles.`,
-      })
-      .setTimestamp();
+    const rankedLine = isRanked
+      ? `🏆 **${winner.name}:** ${winnerStats?.rankedWins || 1}W-${winnerStats?.rankedLosses || 0}L (${(winnerStats?.rankedWeightedScore || 0).toFixed(2)} WS)\n💀 **${loser.name}:** ${loserStats?.rankedWins || 0}W-${loserStats?.rankedLosses || 1}L (${(loserStats?.rankedWeightedScore || 0).toFixed(2)} WS)`
+      : "";
+
+    const final = battleCard({
+      color: "#FFD700",
+      title: `THE ${rankedTag}DEATHBATTLE HAS CONCLUDED`,
+      intro:
+        `**${winner.name}** wins after ${turn} turns.\n` +
+        (hitTurnCap
+          ? "The heavens stopped the fight. Lowest health was executed.\n"
+          : "") +
+        `🏆 ${winner.name} (${winner.hp}/${winner.maxHp} HP)\n💀 ${loser.name} (0/${loser.maxHp} HP)`,
+      f1: fighter1,
+      f2: fighter2,
+      f1Url,
+      f2Url,
+      image: "attachment://deathbattle-final.png",
+      log:
+        battleLog.slice(-3).join("\n") +
+        (rankedLine ? `\n\n${rankedLine}` : "") +
+        `\n\n*${winner.name} stands triumphant.*`,
+      footer: `${rankedTag}Battle lasted ${turn} turns · arena open`,
+    });
 
     await interaction.editReply({
-      embeds: [finalEmbed],
+      components: [final],
       files: [finalAttachment],
-      components: [],
+      flags: V2,
     });
   } catch (error) {
     console.error("Deathbattle error:", error);
     await interaction.editReply({
-      content:
-        "**THE DIVINE POWERS HAVE FAILED TO MANIFEST THE BATTLE! The arena remains empty.**",
-      components: [],
+      components: [
+        container("#8B0000").addTextDisplayComponents(
+          text(
+            "**THE DIVINE POWERS HAVE FAILED TO MANIFEST THE BATTLE! The arena remains empty.**",
+          ),
+        ),
+      ],
+      flags: V2,
     });
   } finally {
     LockManager.releaseLock(interaction.guildId!, "battle");

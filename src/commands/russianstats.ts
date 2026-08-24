@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   MessageFlags,
 } from "discord.js";
 import { RussianStatsManager } from "../utils/russianStatsManager.js";
@@ -9,6 +8,7 @@ import type {
   RussianStats,
   RussianRecord,
 } from "../utils/russianStatsManager.js";
+import { container, section, text, V2 } from "../utils/v2.js";
 
 function formatRelativeTimestamp(iso?: string): string {
   if (!iso) return "Never";
@@ -28,81 +28,20 @@ function clampLimit(value: number, max: number): number {
   return Math.max(1, Math.min(max, value));
 }
 
-function renderUserStatsEmbed(
+function renderUserStats(
   targetUserTag: string,
   targetAvatarUrl: string,
   stats: RussianStats,
-): EmbedBuilder {
-  const embed = new EmbedBuilder()
-    .setColor("#000000")
-    .setTitle("🔫 RUSSIAN ROULETTE RECORD")
-    .setDescription(`Statistics for **${targetUserTag}**`)
-    .setThumbnail(targetAvatarUrl)
-    .setTimestamp();
-
-  embed.addFields(
-    { name: "📊 **OVERVIEW**", value: "\u200B", inline: false },
-    { name: "🏆 Wins", value: stats.wins.toString(), inline: true },
-    { name: "💀 Losses", value: stats.losses.toString(), inline: true },
-    { name: "📈 Win Rate", value: `${stats.winRate}%`, inline: true },
-    {
-      name: "🎯 Total Games",
-      value: stats.totalGames.toString(),
-      inline: true,
-    },
-    {
-      name: "🗓️ Last Game",
-      value: formatRelativeTimestamp(stats.lastGameAt),
-      inline: true,
-    },
-    {
-      name: "⚖️ Ratio",
-      value: `${stats.wins}W-${stats.losses}L`,
-      inline: true,
-    },
+) {
+  return container("#000000").addSectionComponents(
+    section(
+      `## 🔫 RUSSIAN ROULETTE RECORD\nStatistics for **${targetUserTag}**\n\n**OVERVIEW**\n🏆 **Wins:** ${stats.wins} · 💀 **Losses:** ${stats.losses} · 📈 **WR:** ${stats.winRate}%\n🎯 **Games:** ${stats.totalGames} · 🗓️ **Last Game:** ${formatRelativeTimestamp(stats.lastGameAt)} · ⚖️ **Ratio:** ${stats.wins}W-${stats.losses}L\n\n**FATE METRICS**\n🩸 **Suicide:** ${stats.shotSelfDeaths} · 🎯 **Shot by Opponent:** ${stats.shotByOpponentDeaths}\n⏱️ **Avg Turns:** ${stats.avgTurns} · 🔢 **Avg Chamber:** ${stats.avgChamber}\n🏆 **Last Win:** ${formatRelativeTimestamp(stats.lastWinAt)} · 💀 **Last Loss:** ${formatRelativeTimestamp(stats.lastLossAt)}`,
+      targetAvatarUrl,
+    ),
   );
-
-  embed.addFields(
-    { name: "🧨 **FATE METRICS**", value: "\u200B", inline: false },
-    {
-      name: "🩸 Suicide",
-      value: stats.shotSelfDeaths.toString(),
-      inline: true,
-    },
-    {
-      name: "🎯 Shot by Opponent",
-      value: stats.shotByOpponentDeaths.toString(),
-      inline: true,
-    },
-    {
-      name: "⏱️ Average Turns",
-      value: stats.avgTurns.toString(),
-      inline: true,
-    },
-    {
-      name: "🔢 Average Chamber",
-      value: stats.avgChamber.toString(),
-      inline: true,
-    },
-    {
-      name: "🏆 Last Win",
-      value: formatRelativeTimestamp(stats.lastWinAt),
-      inline: true,
-    },
-    {
-      name: "💀 Last Loss",
-      value: formatRelativeTimestamp(stats.lastLossAt),
-      inline: true,
-    },
-  );
-
-  return embed;
 }
 
-function renderLeaderboardEmbed(
-  entries: RussianStats[],
-  minGames: number,
-): EmbedBuilder {
+function renderLeaderboard(entries: RussianStats[], minGames: number) {
   let leaderboardText = "";
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
@@ -112,23 +51,19 @@ function renderLeaderboardEmbed(
     leaderboardText += `${medal} **${entry.userTag}** - ${entry.winRate}% WR (${entry.wins}W-${entry.losses}L, ${entry.totalGames} games)\n`;
   }
 
-  return new EmbedBuilder()
-    .setColor("#FF0000")
-    .setTitle("🏆 RUSSIAN ROULETTE LEADERBOARD")
-    .setDescription(
-      `**Top Players by Win Rate**\n` +
-        `*Minimum ${minGames} games required*\n\n` +
-        leaderboardText,
-    )
-    .setTimestamp();
+  return container("#FF0000").addTextDisplayComponents(
+    text(
+      `## 🏆 RUSSIAN ROULETTE LEADERBOARD\n**Top Players by Win Rate**\n*Minimum ${minGames} games required*\n\n${leaderboardText}`,
+    ),
+  );
 }
 
-function renderHistoryEmbed(
+function renderHistory(
   targetUserTag: string,
   targetAvatarUrl: string,
   history: RussianRecord[],
   targetUserId: string,
-): EmbedBuilder {
+) {
   let historyText = "";
   for (const game of history) {
     const isWinner = game.winnerId === targetUserId;
@@ -146,12 +81,12 @@ function renderHistoryEmbed(
     historyText += `${result} vs **${opponent}** (Chamber ${game.chamber}/6, ${game.turns} turns)${cause} - ${date}\n`;
   }
 
-  return new EmbedBuilder()
-    .setColor("#800000")
-    .setTitle("📜 RUSSIAN ROULETTE CHRONICLES")
-    .setDescription(`Recent games for **${targetUserTag}**\n\n${historyText}`)
-    .setThumbnail(targetAvatarUrl)
-    .setTimestamp();
+  return container("#800000").addSectionComponents(
+    section(
+      `## 📜 RUSSIAN ROULETTE CHRONICLES\nRecent games for **${targetUserTag}**\n\n${historyText}`,
+      targetAvatarUrl,
+    ),
+  );
 }
 
 export const data = new SlashCommandBuilder()
@@ -226,13 +161,16 @@ export async function execute(
           return;
         }
 
-        const embed = renderUserStatsEmbed(
-          targetUser.tag,
-          targetUser.displayAvatarURL(),
-          stats,
-        );
-
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({
+          components: [
+            renderUserStats(
+              targetUser.tag,
+              targetUser.displayAvatarURL(),
+              stats,
+            ),
+          ],
+          flags: V2,
+        });
         return;
       }
 
@@ -256,8 +194,10 @@ export async function execute(
           return;
         }
 
-        const embed = renderLeaderboardEmbed(leaderboard, minGames);
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({
+          components: [renderLeaderboard(leaderboard, minGames)],
+          flags: V2,
+        });
         return;
       }
 
@@ -282,14 +222,17 @@ export async function execute(
           return;
         }
 
-        const embed = renderHistoryEmbed(
-          targetUser.tag,
-          targetUser.displayAvatarURL(),
-          history,
-          targetUser.id,
-        );
-
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({
+          components: [
+            renderHistory(
+              targetUser.tag,
+              targetUser.displayAvatarURL(),
+              history,
+              targetUser.id,
+            ),
+          ],
+          flags: V2,
+        });
         return;
       }
     }

@@ -1,13 +1,13 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  EmbedBuilder,
   MessageFlags,
   GuildMember,
 } from "discord.js";
 import { TopContributorsManager } from "../utils/topContributors.js";
 import { RolePermissions } from "../utils/rolePermissions.js";
 import { WikiRoleSyncManager } from "../utils/wikiRoleSync.js";
+import { container, text, V2 } from "../utils/v2.js";
 
 export const data = new SlashCommandBuilder()
   .setName("syncroles")
@@ -55,34 +55,7 @@ export async function execute(
       interaction.guild,
     );
 
-    const embed = new EmbedBuilder()
-      .setColor(
-        result.errors.length > 0 || !wikiSyncResult.success
-          ? "#FFA500"
-          : "#00FF00",
-      )
-      .setTitle("🏆 WIKI ROLES SYNC COMPLETE")
-      .setDescription(
-        "**The rankings have been synchronized with the reverent roles!**",
-      )
-      .addFields(
-        {
-          name: "📊 SYNCING STATISTICS",
-          value: [
-            `**Linked Users Processed:** ${result.processed}`,
-            `**Roles Granted:** ${result.rolesGranted}`,
-            `**Roles Removed:** ${result.rolesRemoved}`,
-            `**Errors Encountered:** ${result.errors.length}`,
-          ].join("\n"),
-          inline: false,
-        },
-        {
-          name: "📚 WIKI SYNC STATUS",
-          value: wikiSyncResult.message,
-          inline: false,
-        },
-      )
-      .setTimestamp();
+    let body = `## 🏆 WIKI ROLES SYNC COMPLETE\n**The rankings have been synchronized with the reverent roles!**\n\n**📊 SYNCING STATISTICS**\n**Linked Users Processed:** ${result.processed}\n**Roles Granted:** ${result.rolesGranted}\n**Roles Removed:** ${result.rolesRemoved}\n**Errors Encountered:** ${result.errors.length}\n**📚 WIKI SYNC STATUS**\n${wikiSyncResult.message}`;
 
     if (result.errors.length > 0) {
       const errorSample = result.errors.slice(0, 3).join("\n");
@@ -90,15 +63,19 @@ export async function execute(
         result.errors.length > 3
           ? `\n... and ${result.errors.length - 3} more errors`
           : "";
-
-      embed.addFields({
-        name: "⚠️ ERRORS ENCOUNTERED",
-        value: `\`\`\`${errorSample}${additionalErrors}\`\`\``,
-        inline: false,
-      });
+      body += `\n**⚠️ ERRORS ENCOUNTERED**\n\`\`\`${errorSample}${additionalErrors}\`\`\``;
     }
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({
+      components: [
+        container(
+          result.errors.length > 0 || !wikiSyncResult.success
+            ? "#FFA500"
+            : "#00FF00",
+        ).addTextDisplayComponents(text(body)),
+      ],
+      flags: V2,
+    });
   } catch (error) {
     console.error("Error during manual top contributor sync:", error);
     await interaction.editReply({
