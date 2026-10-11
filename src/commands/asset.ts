@@ -76,7 +76,7 @@ export async function execute(
     console.error("Failed to fetch Roblox asset:", error);
     await interaction.editReply({
       content:
-        "❌ I couldn't retrieve that asset. Please try again later or verify the ID.",
+        "❌ I couldn't retrieve that asset. Please try again later or verify the ID.\nIf nothing works, try pinging <@380694434980954114> about it.",
     });
   }
 }
